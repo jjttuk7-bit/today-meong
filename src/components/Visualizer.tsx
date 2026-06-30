@@ -87,6 +87,10 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
     let smokeParticles: any[] = [];
     let glassDrops: any[] = [];
 
+    // Rain-specific dynamic state (distant lightning + drifting ground mist)
+    let lightning = { intensity: 0, nextAt: 0 };
+    let mistOffset = 0;
+
     // Helper to dynamically shift fire sparks colors during Chromotherapy
     const getEmberColor = () => {
       if (colorId === "green") {
@@ -214,32 +218,40 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
       }
     };
 
-    // Initialize Rain (with sliding foreground glass raindrops)
+    // Initialize Rain (depth-layered parallax rain + running glass condensation)
+    const spawnRaindrop = (r: any) => {
+      const depth = Math.random(); // 0 = far/faint/slow, 1 = near/bright/fast
+      r.x = Math.random() * width;
+      r.y = Math.random() * -height;
+      r.depth = depth;
+      r.vy = (3 + depth * 11) * speed;
+      r.vx = -(0.6 + depth * 2.8) * speed; // diagonal wind blow
+      r.length = 6 + depth * 26;
+      r.width = 0.5 + depth * 1.6;
+      r.alpha = 0.05 + depth * 0.4;
+      r.splashY = height * (0.62 + Math.random() * 0.36);
+      return r;
+    };
+
     const initRain = () => {
-      const rainCount = Math.floor(160 * density);
+      const rainCount = Math.floor(230 * density);
       for (let i = 0; i < rainCount; i++) {
-        raindrops.push({
-          x: Math.random() * width,
-          y: Math.random() * -height,
-          vy: (5 + Math.random() * 6) * speed,
-          vx: -(1 + Math.random() * 2) * speed, // wind blow diagonal
-          length: 10 + Math.random() * 20,
-          alpha: 0.15 + Math.random() * 0.35,
-          splashY: height * 0.6 + Math.random() * (height * 0.4), // ground pool
-        });
+        raindrops.push(spawnRaindrop({}));
       }
 
-      // Sliding screen droplets (condensation effect)
-      const glassCount = Math.floor(18 * density);
+      // Foreground "glass" condensation drops that gather weight and run down
+      const glassCount = Math.floor(22 * density);
       for (let i = 0; i < glassCount; i++) {
         glassDrops.push({
           x: Math.random() * width,
           y: Math.random() * height,
-          size: 1.2 + Math.random() * 2.2,
-          vy: 0.15 + Math.random() * 0.3,
-          alpha: 0.2 + Math.random() * 0.3,
+          size: 1.2 + Math.random() * 2.6,
+          vy: 0.1 + Math.random() * 0.35,
+          trail: 8 + Math.random() * 26,
+          alpha: 0.18 + Math.random() * 0.3,
           life: 0,
-          maxLife: 200 + Math.random() * 150,
+          maxLife: 220 + Math.random() * 180,
+          wiggle: Math.random() * Math.PI * 2,
         });
       }
     };
@@ -629,97 +641,182 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
       // --- THEME 5: RAIN ---
       else if (theme === "rain") {
         ctx.save();
-        // Rain puddles reflections shimmer (modulating with breath)
-        const puddleGrad = ctx.createRadialGradient(width / 2, height, 10, width / 2, height, width * 0.8);
-        puddleGrad.addColorStop(0, `rgba(20, 25, 42, ${0.45 + breatheScale * 0.2})`);
-        puddleGrad.addColorStop(1, "transparent");
-        ctx.fillStyle = puddleGrad;
+        const t = Date.now();
+
+        // 1. Wet puddle reflection / storm haze pooling at the bottom (breath-modulated)
+        const bottomGrad = ctx.createLinearGradient(0, height * 0.55, 0, height);
+        bottomGrad.addColorStop(0, "transparent");
+        bottomGrad.addColorStop(1, `rgba(18, 24, 40, ${0.5 + breatheScale * 0.18})`);
+        ctx.fillStyle = bottomGrad;
         ctx.fillRect(0, 0, width, height);
 
-        // Draw Falling Raindrops
-        ctx.strokeStyle = "rgba(174, 194, 224, 0.38)";
-        ctx.lineWidth = 1.2;
-        ctx.lineCap = "round";
+        // 2. Distant lightning: rare, soft flash that briefly lifts the whole scene
+        if (animateStep) {
+          if (lightning.nextAt === 0) lightning.nextAt = t + 6000 + Math.random() * 12000;
+          if (t >= lightning.nextAt && lightning.intensity <= 0) {
+            lightning.intensity = 0.6 + Math.random() * 0.4;
+            lightning.nextAt = t + 9000 + Math.random() * 16000;
+          }
+          lightning.intensity *= 0.9; // quick natural decay
+          if (lightning.intensity < 0.01) lightning.intensity = 0;
+        }
+        if (lightning.intensity > 0) {
+          const flash = lightning.intensity * (0.65 + Math.random() * 0.35); // subtle flicker
+          const lg = ctx.createLinearGradient(0, 0, 0, height);
+          lg.addColorStop(0, `rgba(200, 215, 255, ${0.16 * flash})`);
+          lg.addColorStop(0.5, `rgba(160, 180, 235, ${0.07 * flash})`);
+          lg.addColorStop(1, "transparent");
+          ctx.fillStyle = lg;
+          ctx.fillRect(0, 0, width, height);
+        }
 
+        // Shared wind gust so the whole curtain of rain sways together
+        const gust = Math.sin(t * 0.0004) * 1.4 + Math.sin(t * 0.0011) * 0.6;
+
+        // 3. Falling rain — depth-layered with additive blending for a wet glow
+        ctx.lineCap = "round";
+        ctx.globalCompositeOperation = "lighter";
         raindrops.forEach((r) => {
+          const vx = r.vx + gust * (0.3 + r.depth);
           ctx.beginPath();
           ctx.globalAlpha = r.alpha;
+          ctx.lineWidth = r.width;
+          ctx.strokeStyle = `rgba(190, 208, 238, ${0.5 + r.depth * 0.45})`;
           ctx.moveTo(r.x, r.y);
-          ctx.lineTo(r.x + r.vx * 0.6, r.y + r.vy * 0.6); // draw stroke
+          ctx.lineTo(r.x + vx * 1.1, r.y + r.vy * 1.1);
           ctx.stroke();
 
           if (animateStep) {
             r.y += r.vy;
-            r.x += r.vx;
+            r.x += vx;
 
-            // Check puddle ripple splash hits
             if (r.y >= r.splashY) {
-              // Add a ripple
-              if (Math.random() < 0.55 && ripples.length < 40) {
+              // Only nearer drops splash, keeping the floor uncluttered
+              if (r.depth > 0.45 && Math.random() < 0.5 && ripples.length < 70) {
                 ripples.push({
                   x: r.x,
                   y: r.splashY,
                   radius: 0.5,
-                  maxRadius: 10 + Math.random() * 20,
-                  alpha: 0.3 + Math.random() * 0.4,
-                  speed: 0.2 + Math.random() * 0.3,
+                  maxRadius: 8 + Math.random() * 22 * r.depth,
+                  alpha: 0.25 + r.depth * 0.35,
+                  speed: 0.25 + Math.random() * 0.35,
                 });
+                // occasional little bounce droplets
+                if (Math.random() < 0.4) {
+                  for (let s = 0; s < 2; s++) {
+                    ripples.push({
+                      splash: true,
+                      x: r.x,
+                      y: r.splashY,
+                      vx: (Math.random() * 2 - 1) * 1.2,
+                      vy: -(1 + Math.random() * 1.6),
+                      life: 0,
+                      maxLife: 14 + Math.random() * 10,
+                      size: 0.6 + Math.random() * 1.0,
+                    });
+                  }
+                }
               }
-
-              // Reset raindrop
-              r.x = Math.random() * width;
-              r.y = Math.random() * -100;
-              r.vy = (5 + Math.random() * 6) * speed;
-              r.vx = -(1 + Math.random() * 2) * speed;
-              r.alpha = 0.15 + Math.random() * 0.35;
-              r.splashY = height * 0.65 + Math.random() * (height * 0.35);
+              spawnRaindrop(r);
             }
           }
         });
+        ctx.globalCompositeOperation = "source-over";
 
-        // Draw ripples splash
+        // 4. Floor ripples (double perspective rings) + bounce splash droplets
+        ctx.globalCompositeOperation = "lighter";
         ripples.forEach((rip) => {
-          ctx.beginPath();
-          ctx.strokeStyle = `rgba(180, 205, 235, ${rip.alpha * (1 - rip.radius / rip.maxRadius)})`;
-          ctx.lineWidth = 0.8;
-          ctx.ellipse(rip.x, rip.y, rip.radius, rip.radius * 0.3, 0, 0, Math.PI * 2); // perspective ellipse
-          ctx.stroke();
-
-          if (animateStep) {
-            rip.radius += rip.speed;
+          if (rip.splash) {
+            ctx.beginPath();
+            ctx.globalAlpha = Math.max(0, 1 - rip.life / rip.maxLife);
+            ctx.fillStyle = "rgba(200, 218, 245, 0.85)";
+            ctx.arc(rip.x, rip.y, rip.size, 0, Math.PI * 2);
+            ctx.fill();
+            if (animateStep) {
+              rip.x += rip.vx;
+              rip.y += rip.vy;
+              rip.vy += 0.22; // gravity
+              rip.life++;
+            }
+          } else {
+            const fade = 1 - rip.radius / rip.maxRadius;
+            ctx.globalAlpha = 1;
+            ctx.lineWidth = 0.8;
+            ctx.strokeStyle = `rgba(185, 208, 238, ${rip.alpha * fade})`;
+            ctx.beginPath();
+            ctx.ellipse(rip.x, rip.y, rip.radius, rip.radius * 0.3, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            if (rip.radius > rip.maxRadius * 0.4) {
+              ctx.strokeStyle = `rgba(185, 208, 238, ${rip.alpha * 0.5 * fade})`;
+              ctx.beginPath();
+              ctx.ellipse(rip.x, rip.y, rip.radius * 1.5, rip.radius * 0.45, 0, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+            if (animateStep) rip.radius += rip.speed;
           }
         });
+        ctx.globalCompositeOperation = "source-over";
 
-        // Draw Sliding Screen Glass Droplets (Premium Window condensation)
+        // 5. Low drifting mist band hugging the ground
+        if (animateStep) mistOffset += 0.2 * speed;
+        const mistY = height * 0.72;
+        ctx.globalAlpha = 0.06 + breatheScale * 0.03;
+        for (let m = 0; m < 3; m++) {
+          const mx = ((mistOffset * (0.3 + m * 0.2)) % (width + 300)) - 150;
+          const mg = ctx.createRadialGradient(mx, mistY + m * 28, 10, mx, mistY + m * 28, 260);
+          mg.addColorStop(0, "rgba(150, 165, 195, 0.5)");
+          mg.addColorStop(1, "transparent");
+          ctx.fillStyle = mg;
+          ctx.fillRect(0, mistY - 90, width, height - mistY + 90);
+        }
+        ctx.globalAlpha = 1;
+
+        // 6. Foreground glass condensation drops with running trails
         glassDrops.forEach((g) => {
-          ctx.beginPath();
-          ctx.fillStyle = `rgba(255, 255, 255, ${g.alpha})`;
-          ctx.arc(g.x, g.y, g.size, 0, Math.PI * 2);
-          ctx.fill();
+          const sway = Math.sin(g.life * 0.05 + g.wiggle) * 0.4;
 
-          // Subtle reflection sparkle
+          // condensation trail above the drop head
+          const trailGrad = ctx.createLinearGradient(g.x, g.y - g.trail, g.x, g.y);
+          trailGrad.addColorStop(0, "rgba(220, 230, 245, 0)");
+          trailGrad.addColorStop(1, `rgba(220, 230, 245, ${g.alpha * 0.5})`);
+          ctx.strokeStyle = trailGrad;
+          ctx.lineWidth = g.size * 0.8;
           ctx.beginPath();
-          ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-          ctx.arc(g.x - g.size * 0.3, g.y - g.size * 0.3, g.size * 0.25, 0, Math.PI * 2);
+          ctx.moveTo(g.x + sway, g.y - g.trail);
+          ctx.lineTo(g.x + sway, g.y);
+          ctx.stroke();
+
+          // drop head
+          ctx.beginPath();
+          ctx.fillStyle = `rgba(225, 235, 248, ${g.alpha + 0.1})`;
+          ctx.arc(g.x + sway, g.y, g.size, 0, Math.PI * 2);
+          ctx.fill();
+          // specular highlight
+          ctx.beginPath();
+          ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+          ctx.arc(g.x + sway - g.size * 0.3, g.y - g.size * 0.3, g.size * 0.28, 0, Math.PI * 2);
           ctx.fill();
 
           if (animateStep) {
-            g.y += g.vy * (0.8 + breatheScale * 0.4); // condensation slides down matching wind/breath sweep
+            g.vy += 0.004; // gathers weight and accelerates
+            g.y += g.vy * (1 + breatheScale * 0.4);
+            g.x += sway * 0.5;
             g.life++;
 
-            if (g.life >= g.maxLife || g.y > height + 10) {
+            if (g.life >= g.maxLife || g.y > height + 12) {
               g.x = Math.random() * width;
-              g.y = Math.random() * -50;
+              g.y = Math.random() * -40;
+              g.size = 1.2 + Math.random() * 2.6;
+              g.vy = 0.1 + Math.random() * 0.35;
+              g.trail = 8 + Math.random() * 26;
+              g.alpha = 0.18 + Math.random() * 0.3;
               g.life = 0;
-              g.size = 1.2 + Math.random() * 2.2;
-              g.alpha = 0.2 + Math.random() * 0.3;
             }
           }
         });
 
         if (animateStep) {
-          // Cleanup dead ripples
-          ripples = ripples.filter((rip) => rip.radius < rip.maxRadius);
+          ripples = ripples.filter((rip) => (rip.splash ? rip.life < rip.maxLife : rip.radius < rip.maxRadius));
         }
         ctx.restore();
       }
