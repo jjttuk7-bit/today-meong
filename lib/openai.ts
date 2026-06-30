@@ -339,3 +339,56 @@ export async function synthesizeSpeech({ text, voice = "shimmer", instructions }
   const arrayBuffer = await response.arrayBuffer();
   return { audio: Buffer.from(arrayBuffer), contentType: "audio/mpeg" };
 }
+
+// --- AI background image generation (gpt-image-1) ---
+
+const THEME_SCENE: Record<string, string> = {
+  fire: "an intimate close-up of glowing embers and a softly burning bonfire at night, deep amber and orange light, drifting sparks and gentle smoke",
+  water: "a dreamy underwater scene of deep tranquil blue water with soft light rays and rising bubbles, serene and weightless",
+  wave: "a calm dark ocean at night under faint moonlight, gentle rolling waves meeting a quiet shore, deep teal and indigo",
+  cloud: "slow drifting clouds across a vast deep twilight sky with faint distant stars, dreamy purple and indigo nebula tones",
+  rain: "soft rain falling against a window at night with blurred bokeh city lights, moody blue and slate tones, cozy and quiet",
+};
+
+const MOOD_FEELING: Record<string, string> = {
+  stress: "calming and releasing tension",
+  calm: "peaceful and deeply restful",
+  anxiety: "safe, grounding and reassuring",
+  lethargy: "gently warm and softly uplifting",
+  excitement: "soothing and quietly settling",
+};
+
+export interface BackgroundInput {
+  theme: string;
+  moodQuick?: string;
+  size?: "1024x1024" | "1536x1024" | "1024x1536";
+}
+
+// Generate an ambient meditation background image. Throws when no API key is set
+// so the client can gracefully keep the pure generative-canvas look.
+export async function generateBackground({ theme, moodQuick, size = "1536x1024" }: BackgroundInput) {
+  if (!hasApiKey()) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+  const scene = THEME_SCENE[theme] || THEME_SCENE.cloud;
+  const feeling = MOOD_FEELING[moodQuick || "calm"] || MOOD_FEELING.calm;
+
+  const prompt = `A serene, cinematic meditation background: ${scene}. Atmosphere ${feeling}. Dark, eye-friendly, low-key ambient tones suitable for staring at for a long time. Soft focus, dreamy bokeh, abstract and minimal, no people, no text, no logos, no harsh bright highlights.`;
+
+  const response = await ai.images.generate({
+    model: "gpt-image-1",
+    prompt,
+    size,
+    quality: "medium",
+  });
+
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) {
+    throw new Error("Image generation returned no data");
+  }
+
+  return { dataUrl: `data:image/png;base64,${b64}` };
+}

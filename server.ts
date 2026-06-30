@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { analyzeMood, synthesizeSpeech } from "./lib/openai";
+import { analyzeMood, synthesizeSpeech, generateBackground } from "./lib/openai";
 
 dotenv.config();
 
@@ -40,6 +40,25 @@ app.post("/api/tts", async (req, res) => {
     console.error("OpenAI TTS error:", error);
     // 503 signals the client to gracefully fall back to browser speechSynthesis.
     return res.status(503).json({ error: "tts_unavailable" });
+  }
+});
+
+// REST API for AI ambient background image using OpenAI gpt-image-1
+app.post("/api/generate-bg", async (req, res) => {
+  const { theme, moodQuick } = req.body;
+
+  if (!theme) {
+    return res.status(400).json({ error: "theme is required" });
+  }
+
+  try {
+    const { dataUrl } = await generateBackground({ theme, moodQuick });
+    res.set("Cache-Control", "public, max-age=86400");
+    return res.json({ image: dataUrl });
+  } catch (error) {
+    console.error("OpenAI background image error:", error);
+    // 503 signals the client to keep the pure generative-canvas look.
+    return res.status(503).json({ error: "image_unavailable" });
   }
 });
 

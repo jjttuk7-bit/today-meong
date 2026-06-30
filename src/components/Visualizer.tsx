@@ -8,13 +8,23 @@ interface VisualizerProps {
   breathingId: BreathingId;
   breathePhase: "inhale" | "hold" | "exhale" | "hold_empty";
   colorId: ColorId;
+  backgroundImage?: string | null;
 }
 
-export function Visualizer({ theme, params, isPaused, breathingId, breathePhase, colorId }: VisualizerProps) {
+export function Visualizer({ theme, params, isPaused, breathingId, breathePhase, colorId, backgroundImage }: VisualizerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [bgLoaded, setBgLoaded] = useState(false);
   const animationRef = useRef<number | null>(null);
+
+  // Track whether an AI background image is present without re-initialising the
+  // particle scene; the draw loop reads this each frame.
+  const hasBgRef = useRef<boolean>(!!backgroundImage);
+  useEffect(() => {
+    hasBgRef.current = !!backgroundImage;
+    if (!backgroundImage) setBgLoaded(false);
+  }, [backgroundImage]);
 
   // Constants modulated by AIParams and Chromotherapy
   const speed = params.speedMultiplier || 1.0;
@@ -241,17 +251,48 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
     else if (theme === "cloud") initCloud();
     else if (theme === "rain") initRain();
 
+    // Pre-render a small film-grain noise tile once for a cinematic texture
+    const grainTile = document.createElement("canvas");
+    grainTile.width = 180;
+    grainTile.height = 180;
+    const gctx = grainTile.getContext("2d");
+    if (gctx) {
+      const noise = gctx.createImageData(grainTile.width, grainTile.height);
+      for (let i = 0; i < noise.data.length; i += 4) {
+        const v = Math.random() * 255;
+        noise.data[i] = v;
+        noise.data[i + 1] = v;
+        noise.data[i + 2] = v;
+        noise.data[i + 3] = 255;
+      }
+      gctx.putImageData(noise, 0, 0);
+    }
+
     // Drawing loops
     let currentBreatheScale = 0.5;
 
     const draw = () => {
-      // 1. Render ambient backing gradient
-      const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-      bgGrad.addColorStop(0, colors[2] || "#080b12");
-      bgGrad.addColorStop(0.5, colors[1] || colors[0]);
-      bgGrad.addColorStop(1, colors[0]);
-      ctx.fillStyle = bgGrad;
-      ctx.fillRect(0, 0, width, height);
+      // 1. Render ambient backing layer.
+      if (hasBgRef.current) {
+        // An AI photo sits behind the canvas: clear to transparency and lay down
+        // only a soft, eye-friendly dark veil so the image shows through while
+        // particles and text stay readable.
+        ctx.clearRect(0, 0, width, height);
+        const veil = ctx.createLinearGradient(0, 0, 0, height);
+        veil.addColorStop(0, "rgba(3, 4, 9, 0.42)");
+        veil.addColorStop(0.5, "rgba(3, 4, 9, 0.18)");
+        veil.addColorStop(1, "rgba(2, 3, 7, 0.6)");
+        ctx.fillStyle = veil;
+        ctx.fillRect(0, 0, width, height);
+      } else {
+        // No image: paint the full ambient gradient as before.
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+        bgGrad.addColorStop(0, colors[2] || "#080b12");
+        bgGrad.addColorStop(0.5, colors[1] || colors[0]);
+        bgGrad.addColorStop(1, colors[0]);
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, width, height);
+      }
 
       // Skip dynamic updates if paused, but keep redrawing scene
       const animateStep = !isPaused;
@@ -315,12 +356,13 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
         ctx.closePath();
         ctx.fill();
 
-        // Update and Draw Ember Particles
+        // Update and Draw Ember Particles (additive blending for real bloom)
+        ctx.globalCompositeOperation = "lighter";
         particles.forEach((p) => {
           ctx.beginPath();
           ctx.fillStyle = p.color;
           ctx.globalAlpha = p.alpha * (1 - p.life / p.maxLife);
-          
+
           // Flame glow blur filter simulation
           ctx.shadowBlur = p.size * (1.2 + breatheScale * 0.8);
           ctx.shadowColor = p.color;
@@ -506,11 +548,14 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
             }
           }
 
-          // Draw foams
+          // Draw foams (additive blending for soft glowing sea spray)
+          ctx.globalCompositeOperation = "lighter";
           wave.foamParticles.forEach((f: any) => {
             ctx.beginPath();
             ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
             ctx.globalAlpha = 0.65 * (1 - f.life / f.maxLife);
+            ctx.shadowBlur = f.size * 2;
+            ctx.shadowColor = "rgba(200, 235, 255, 0.8)";
             ctx.arc(f.x, f.y, f.size, 0, Math.PI * 2);
             ctx.fill();
 
@@ -520,6 +565,7 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
               f.life++;
             }
           });
+          ctx.globalCompositeOperation = "source-over";
 
           // Clean dead foam
           if (animateStep) {
@@ -532,14 +578,19 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
       // --- THEME 4: CLOUD ---
       else if (theme === "cloud") {
         ctx.save();
-        // Draw starry nebula background
+        // Draw starry nebula background (additive blending for soft glow)
+        ctx.globalCompositeOperation = "lighter";
         backgroundStars.forEach((s) => {
           ctx.beginPath();
           ctx.fillStyle = "#ffffff";
           ctx.globalAlpha = s.alpha * (0.4 + Math.sin(Date.now() * s.twinkle) * 0.6);
+          ctx.shadowBlur = s.size * 2.5;
+          ctx.shadowColor = "rgba(180, 200, 255, 0.9)";
           ctx.arc(s.x, s.y, s.size * (0.85 + breatheScale * 0.3), 0, Math.PI * 2); // Star size pulses with breathing
           ctx.fill();
         });
+        ctx.globalCompositeOperation = "source-over";
+        ctx.shadowBlur = 0;
 
         // Draw cloud formations
         clouds.forEach((c) => {
@@ -673,6 +724,40 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
         ctx.restore();
       }
 
+      // --- CINEMATIC POST-PROCESSING (applies to all themes) ---
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.shadowBlur = 0;
+
+      // Vignette: gently darken the edges to draw the eye inward
+      const vignette = ctx.createRadialGradient(
+        width / 2,
+        height / 2,
+        Math.min(width, height) * 0.32,
+        width / 2,
+        height / 2,
+        Math.max(width, height) * 0.78
+      );
+      vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+      vignette.addColorStop(1, "rgba(0, 0, 0, 0.5)");
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, width, height);
+
+      // Film grain: subtle animated texture so flat areas never look sterile
+      if (gctx) {
+        ctx.globalCompositeOperation = "overlay";
+        ctx.globalAlpha = 0.035;
+        const ox = Math.floor(Math.random() * grainTile.width);
+        const oy = Math.floor(Math.random() * grainTile.height);
+        for (let gx = -ox; gx < width; gx += grainTile.width) {
+          for (let gy = -oy; gy < height; gy += grainTile.height) {
+            ctx.drawImage(grainTile, gx, gy);
+          }
+        }
+      }
+      ctx.restore();
+
       animationRef.current = requestAnimationFrame(draw);
     };
 
@@ -687,7 +772,19 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
 
   return (
     <div id="visualizer-container" ref={containerRef} className="absolute inset-0 w-full h-full overflow-hidden select-none">
-      <canvas id="generative-visual-canvas" ref={canvasRef} className="w-full h-full block" />
+      {/* AI-generated ambient backdrop (behind the generative canvas). Fades in
+          on load; the canvas above lays a translucent veil so it stays calm. */}
+      {backgroundImage && (
+        <img
+          src={backgroundImage}
+          alt=""
+          aria-hidden="true"
+          onLoad={() => setBgLoaded(true)}
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-[2500ms] ease-out"
+          style={{ opacity: bgLoaded ? 1 : 0 }}
+        />
+      )}
+      <canvas id="generative-visual-canvas" ref={canvasRef} className="relative w-full h-full block" />
     </div>
   );
 }

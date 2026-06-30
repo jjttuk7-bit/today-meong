@@ -253,6 +253,7 @@ export default function App() {
                 theme={selectedTheme}
                 params={aiParams}
                 duration={duration}
+                moodQuick={selectedMood}
                 onExit={handleResetSession}
                 lang={lang}
               />

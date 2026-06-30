@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Play, Pause, X, Volume2, VolumeX, Sparkles, RefreshCw, Mic, MicOff, Settings, Heart } from "lucide-react";
-import { ThemeId, AIParams, BreathingId, MusicId, ColorId } from "../types";
+import { ThemeId, AIParams, BreathingId, MusicId, ColorId, MoodQuickId } from "../types";
 import { Visualizer } from "./Visualizer";
 import { useSound } from "../hooks/useSound";
 
@@ -9,9 +9,14 @@ interface MeditationPlaybackProps {
   theme: ThemeId;
   params: AIParams;
   duration: number; // in minutes
+  moodQuick?: MoodQuickId;
   onExit: () => void;
   lang: "ko" | "en";
 }
+
+// Cache AI background images per theme for the browser session to limit
+// generation cost/latency (max one image per theme).
+const bgImageCache = new Map<string, string>();
 
 // Curated OpenAI TTS voices well-suited to a calm meditation guide.
 const OPENAI_VOICES: { id: string; label: string; desc: string }[] = [
@@ -50,10 +55,13 @@ export function MeditationPlayback({
   theme,
   params,
   duration,
+  moodQuick,
   onExit,
   lang,
 }: MeditationPlaybackProps) {
   const { initSynth, fadeOutAndStop, setVolume } = useSound();
+
+  const [bgImage, setBgImage] = useState<string | null>(() => bgImageCache.get(theme) || null);
   
   const [isEntering, setIsEntering] = useState(true);
   const [timeLeft, setTimeLeft] = useState(duration * 60); // converted to seconds
@@ -174,6 +182,39 @@ export function MeditationPlayback({
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, [theme, params, selectedMusicId]);
+
+  // Generate an AI ambient background image (gpt-image-1) once per theme.
+  // Runs during the entering screen; on failure we keep the pure canvas look.
+  useEffect(() => {
+    const cached = bgImageCache.get(theme);
+    if (cached) {
+      setBgImage(cached);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/generate-bg", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ theme, moodQuick }),
+        });
+        if (!res.ok) throw new Error(`bg request failed: ${res.status}`);
+        const data = await res.json();
+        if (data?.image && !cancelled) {
+          bgImageCache.set(theme, data.image);
+          setBgImage(data.image);
+        }
+      } catch (err) {
+        console.warn("AI background unavailable, using generative canvas only:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [theme, moodQuick]);
 
   // Handle active session timer countdown
   useEffect(() => {
@@ -379,13 +420,14 @@ export function MeditationPlayback({
     >
       {/* 1. Generative Visual Canvas Backing */}
       {!isEntering && (
-        <Visualizer 
-          theme={theme} 
-          params={params} 
-          isPaused={isPaused || isFinished} 
+        <Visualizer
+          theme={theme}
+          params={params}
+          isPaused={isPaused || isFinished}
           breathingId={selectedBreathingId}
           breathePhase={breathePhase}
           colorId={selectedColorId}
+          backgroundImage={bgImage}
         />
       )}
 

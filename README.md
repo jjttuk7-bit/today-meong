@@ -19,10 +19,16 @@ View your app in AI Studio: https://ai.studio/apps/2d90391d-50e8-47c9-abff-60596
 3. Run the app:
    `npm run dev`
 
-The OpenAI key powers both the mood analysis (`gpt-4o-mini`) and the meditation
-voice narration (`gpt-4o-mini-tts`). Without a key the app still runs: mood
-analysis uses built-in fallback params and narration falls back to the browser's
-built-in speech synthesis.
+The OpenAI key powers the mood analysis (`gpt-4o-mini`), the meditation voice
+narration (`gpt-4o-mini-tts`), and the AI ambient background image
+(`gpt-image-1`). Without a key the app still runs: mood analysis uses built-in
+fallback params, narration falls back to the browser's built-in speech
+synthesis, and the background falls back to the pure generative canvas.
+
+The meditation canvas itself was also upgraded with additive-blend bloom on
+glowing particles, an edge vignette, and subtle film grain for a more cinematic,
+immersive look. The AI background (one image per theme, cached for the browser
+session) is layered behind the canvas, which lays a soft translucent veil over it.
 
 ## Deploy on Vercel
 
