@@ -18,6 +18,18 @@ interface MeditationPlaybackProps {
 // generation cost/latency (max one image per theme).
 const bgImageCache = new Map<string, string>();
 
+// Single source of truth for breathing phase durations (in seconds), shared by
+// the pranayama scheduler and the on-screen circle animation so they never drift.
+// Coherent is a calm 6-6 (5 breaths/min); sleep is 4-7-8; box is 4-4-4-4.
+const BREATHING_PATTERNS: Record<
+  BreathingId,
+  { inhale: number; hold?: number; exhale: number; hold_empty?: number }
+> = {
+  coherent: { inhale: 6, exhale: 6 },
+  sleep: { inhale: 4, hold: 7, exhale: 8 },
+  box: { inhale: 4, hold: 4, exhale: 4, hold_empty: 4 },
+};
+
 // Curated OpenAI TTS voices well-suited to a calm meditation guide.
 const OPENAI_VOICES: { id: string; label: string; desc: string }[] = [
   { id: "shimmer", label: "Shimmer", desc: "따뜻한 여성 (추천)" },
@@ -274,49 +286,51 @@ export function MeditationPlayback({
     if (isEntering || isPaused || isFinished) return;
 
     let timeoutId: NodeJS.Timeout;
-    
+
     const runNext = () => {
+      const pattern = BREATHING_PATTERNS[selectedBreathingId];
       let nextPhase: typeof breathePhase = "inhale";
-      let delay = 4000;
+      // delaySec = how long to stay in the CURRENT phase before moving on.
+      let delaySec = pattern.inhale;
 
       if (selectedBreathingId === "coherent") {
-        if (breathePhase === "inhale" || breathePhase === "hold" || breathePhase === "hold_empty") {
-          nextPhase = "exhale";
-          delay = 4000; // 4s inhale duration
-        } else {
+        if (breathePhase === "exhale") {
           nextPhase = "inhale";
-          delay = 4000; // 4s exhale duration
+          delaySec = pattern.exhale;
+        } else {
+          nextPhase = "exhale";
+          delaySec = pattern.inhale;
         }
       } else if (selectedBreathingId === "sleep") {
-        if (breathePhase === "inhale" || breathePhase === "hold_empty") {
+        if (breathePhase === "inhale") {
           nextPhase = "hold";
-          delay = 4000; // 4s inhale duration
+          delaySec = pattern.inhale;
         } else if (breathePhase === "hold") {
           nextPhase = "exhale";
-          delay = 7000; // 7s hold duration
+          delaySec = pattern.hold ?? pattern.inhale;
         } else {
           nextPhase = "inhale";
-          delay = 8000; // 8s exhale duration
+          delaySec = pattern.exhale;
         }
       } else if (selectedBreathingId === "box") {
         if (breathePhase === "inhale") {
           nextPhase = "hold";
-          delay = 4000; // 4s inhale duration
+          delaySec = pattern.inhale;
         } else if (breathePhase === "hold") {
           nextPhase = "exhale";
-          delay = 4000; // 4s hold duration
+          delaySec = pattern.hold ?? pattern.inhale;
         } else if (breathePhase === "exhale") {
           nextPhase = "hold_empty";
-          delay = 4000; // 4s exhale duration
+          delaySec = pattern.exhale;
         } else {
           nextPhase = "inhale";
-          delay = 4000; // 4s empty hold duration
+          delaySec = pattern.hold_empty ?? pattern.inhale;
         }
       }
 
       timeoutId = setTimeout(() => {
         setBreathePhase(nextPhase);
-      }, delay);
+      }, delaySec * 1000);
     };
 
     runNext();
@@ -350,6 +364,12 @@ export function MeditationPlayback({
     const currentLine = narrationSchedule.find(item => item.second === elapsed);
     if (currentLine) {
       setCurrentSubtitle(currentLine.text);
+
+      // Align the breathing circle with the spoken cue: if the line invites an
+      // inhale, restart the cycle on "inhale" so the visual matches the voice.
+      if (/들이|들숨|inhale|breathe in|draw a breath/i.test(currentLine.text)) {
+        setBreathePhase("inhale");
+      }
 
       // Premium narration via OpenAI TTS (falls back to browser voice on failure)
       playNarration(currentLine.text);
@@ -456,6 +476,7 @@ export function MeditationPlayback({
 
       {/* 1.1 Sensory Coherence: Central Breathing Guide HUD */}
       {!isEntering && !isFinished && showBreathGuide && (() => {
+        const pattern = BREATHING_PATTERNS[selectedBreathingId];
         const getBreatheGuideStyle = () => {
           switch (breathePhase) {
             case "inhale":
@@ -466,7 +487,7 @@ export function MeditationPlayback({
                 bgColor: "rgba(249, 115, 22, 0.08)",
                 label: isEn ? "Inhale" : "들이쉬기",
                 sublabel: isEn ? "Breath In Gently" : "Inhale / 들숨",
-                duration: 4.0
+                duration: pattern.inhale
               };
             case "hold":
               return {
@@ -476,7 +497,7 @@ export function MeditationPlayback({
                 bgColor: "rgba(168, 85, 247, 0.12)",
                 label: isEn ? "Hold" : "숨 참기",
                 sublabel: isEn ? "Retain Full Breath" : "Hold / 가득 채움",
-                duration: selectedBreathingId === "sleep" ? 7.0 : 4.0
+                duration: pattern.hold ?? pattern.inhale
               };
             case "exhale":
               return {
@@ -486,7 +507,7 @@ export function MeditationPlayback({
                 bgColor: "rgba(255, 255, 255, 0.01)",
                 label: isEn ? "Exhale" : "내쉬기",
                 sublabel: isEn ? "Release Slowly" : "Exhale / 날숨",
-                duration: selectedBreathingId === "sleep" ? 8.0 : 4.0
+                duration: pattern.exhale
               };
             case "hold_empty":
               return {
@@ -496,7 +517,7 @@ export function MeditationPlayback({
                 bgColor: "rgba(100, 116, 139, 0.05)",
                 label: isEn ? "Hold Empty" : "숨 참기",
                 sublabel: isEn ? "Stay Empty" : "Hold / 비워냄",
-                duration: 4.0
+                duration: pattern.hold_empty ?? pattern.inhale
               };
           }
         };
@@ -826,7 +847,7 @@ export function MeditationPlayback({
                     </label>
                     <div className="grid grid-cols-3 gap-1.5">
                       {[
-                        { id: "coherent", name: "4-4 균형", desc: "자율신경 정돈" },
+                        { id: "coherent", name: "6-6 균형", desc: "자율신경 정돈" },
                         { id: "sleep", name: "4-7-8 숙면", desc: "불면증 극복" },
                         { id: "box", name: "4-4-4-4 정화", desc: "고도의 집중" }
                       ].map((item) => (
