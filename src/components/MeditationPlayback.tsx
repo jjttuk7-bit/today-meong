@@ -24,12 +24,26 @@ const OPENAI_VOICES: { id: string; label: string; desc: string }[] = [
 ];
 
 // Map the pacing slider (0.55 slow ~ 0.85 normal) to a delivery instruction.
+// Detailed, multi-axis steering is what makes gpt-4o-mini-tts sound like a real
+// meditation instructor rather than a flat TTS readout.
 const ttsInstructions = (isEn: boolean, rate: number) => {
   const pace =
-    rate <= 0.6 ? "extremely slow and spacious" : rate <= 0.72 ? "very slow and calm" : "slow and gentle";
-  return `Speak as a warm, gentle meditation guide in ${
-    isEn ? "English" : "Korean"
-  }. Use a soft, soothing, deeply calm tone with an ${pace} pace, leaving peaceful pauses between phrases.`;
+    rate <= 0.6
+      ? "Extremely slow and spacious — let every word hang in the air, with long 1-2 second silences between sentences."
+      : rate <= 0.72
+      ? "Very slow and unhurried — let each sentence breathe, with calm pauses between phrases."
+      : "Slow and gentle, with relaxed, even pauses.";
+
+  return [
+    `Language: ${isEn ? "English" : "Korean"}.`,
+    "Identity: A professional meditation and yoga instructor guiding a late-night relaxation session.",
+    "Voice affect: Soft, warm, feminine, and deeply soothing — intimate, as if speaking gently and closely to one person.",
+    "Tone: Serene, nurturing, tranquil, and compassionate. Never bright, energetic, cheerful, or announcer-like.",
+    "Emotion: Genuine warmth and inner peace, as if you yourself are completely relaxed.",
+    "Delivery: Breathy, hushed, and relaxed, with soft falling intonation at the end of phrases. Slightly lowered pitch.",
+    `Pacing: ${pace}`,
+    "Pronunciation: Smooth and softened, gently trailing — never clipped or robotic.",
+  ].join("\n");
 };
 
 export function MeditationPlayback({

@@ -325,7 +325,14 @@ export async function synthesizeSpeech({ text, voice = "shimmer", instructions }
     input: text,
     instructions:
       instructions ||
-      "Speak as a warm, gentle meditation guide. Use a soft, soothing, deeply calm tone with an extremely slow and peaceful pace, leaving quiet space between phrases.",
+      [
+        "Identity: A professional meditation and yoga instructor guiding a late-night relaxation session.",
+        "Voice affect: Soft, warm, feminine, deeply soothing and intimate.",
+        "Tone: Serene, nurturing, tranquil — never bright, energetic, or announcer-like.",
+        "Delivery: Breathy, hushed, relaxed, with soft falling intonation and slightly lowered pitch.",
+        "Pacing: Extremely slow and spacious, leaving long, calm silences between sentences.",
+        "Pronunciation: Smooth and softened, gently trailing — never clipped or robotic.",
+      ].join("\n"),
     response_format: "mp3",
   });
 
