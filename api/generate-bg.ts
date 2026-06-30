@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { generateBackground } from "../lib/openai";
+import { generateBackground } from "../lib/openai.js";
 
 // gpt-image-1 generation can take 10-30s; allow up to 60s (Hobby plan max).
 export const config = { maxDuration: 60 };
