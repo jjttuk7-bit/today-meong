@@ -226,9 +226,9 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
       r.depth = depth;
       r.vy = (3 + depth * 11) * speed;
       r.vx = -(0.6 + depth * 2.8) * speed; // diagonal wind blow
-      r.length = 6 + depth * 26;
-      r.width = 0.5 + depth * 1.6;
-      r.alpha = 0.05 + depth * 0.4;
+      r.length = 7 + depth * 28;
+      r.width = 1.0 + depth * 2.8; // thicker, heavier downpour
+      r.alpha = 0.07 + depth * 0.45;
       r.splashY = height * (0.62 + Math.random() * 0.36);
       return r;
     };
@@ -650,22 +650,22 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
         ctx.fillStyle = bottomGrad;
         ctx.fillRect(0, 0, width, height);
 
-        // 2. Distant lightning: rare, soft flash that briefly lifts the whole scene
+        // 2. Distant lightning: frequent, strong flashes that light up the storm
         if (animateStep) {
-          if (lightning.nextAt === 0) lightning.nextAt = t + 6000 + Math.random() * 12000;
+          if (lightning.nextAt === 0) lightning.nextAt = t + 2500 + Math.random() * 5000;
           if (t >= lightning.nextAt && lightning.intensity <= 0) {
-            lightning.intensity = 0.6 + Math.random() * 0.4;
-            lightning.nextAt = t + 9000 + Math.random() * 16000;
+            lightning.intensity = 1.1 + Math.random() * 0.6; // powerful strike
+            lightning.nextAt = t + 4000 + Math.random() * 8000;
           }
-          lightning.intensity *= 0.9; // quick natural decay
+          lightning.intensity *= 0.92; // slightly slower decay so the flash lingers
           if (lightning.intensity < 0.01) lightning.intensity = 0;
         }
         if (lightning.intensity > 0) {
-          const flash = lightning.intensity * (0.65 + Math.random() * 0.35); // subtle flicker
+          const flash = Math.min(1.6, lightning.intensity) * (0.6 + Math.random() * 0.4); // brighter flicker
           const lg = ctx.createLinearGradient(0, 0, 0, height);
-          lg.addColorStop(0, `rgba(200, 215, 255, ${0.16 * flash})`);
-          lg.addColorStop(0.5, `rgba(160, 180, 235, ${0.07 * flash})`);
-          lg.addColorStop(1, "transparent");
+          lg.addColorStop(0, `rgba(210, 222, 255, ${0.42 * flash})`);
+          lg.addColorStop(0.45, `rgba(175, 195, 245, ${0.2 * flash})`);
+          lg.addColorStop(1, `rgba(120, 145, 210, ${0.05 * flash})`);
           ctx.fillStyle = lg;
           ctx.fillRect(0, 0, width, height);
         }
