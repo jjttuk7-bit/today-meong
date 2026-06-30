@@ -13,6 +13,25 @@ interface MeditationPlaybackProps {
   lang: "ko" | "en";
 }
 
+// Curated OpenAI TTS voices well-suited to a calm meditation guide.
+const OPENAI_VOICES: { id: string; label: string; desc: string }[] = [
+  { id: "shimmer", label: "Shimmer", desc: "따뜻한 여성 (추천)" },
+  { id: "coral", label: "Coral", desc: "부드러운 여성" },
+  { id: "nova", label: "Nova", desc: "맑은 여성" },
+  { id: "sage", label: "Sage", desc: "차분한 중성" },
+  { id: "alloy", label: "Alloy", desc: "균형 잡힌 중성" },
+  { id: "fable", label: "Fable", desc: "포근한 내레이션" },
+];
+
+// Map the pacing slider (0.55 slow ~ 0.85 normal) to a delivery instruction.
+const ttsInstructions = (isEn: boolean, rate: number) => {
+  const pace =
+    rate <= 0.6 ? "extremely slow and spacious" : rate <= 0.72 ? "very slow and calm" : "slow and gentle";
+  return `Speak as a warm, gentle meditation guide in ${
+    isEn ? "English" : "Korean"
+  }. Use a soft, soothing, deeply calm tone with an ${pace} pace, leaving peaceful pauses between phrases.`;
+};
+
 export function MeditationPlayback({
   theme,
   params,
@@ -36,8 +55,7 @@ export function MeditationPlayback({
   const [selectedColorId, setSelectedColorId] = useState<ColorId>("off");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("");
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("shimmer"); // OpenAI TTS voice id
   const [voiceRate, setVoiceRate] = useState<number>(0.68); // ultra calm meditation pace
   const [showVoicePanel, setShowVoicePanel] = useState<boolean>(false);
   const [showTherapyPanel, setShowTherapyPanel] = useState<boolean>(false);
@@ -45,43 +63,84 @@ export function MeditationPlayback({
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // OpenAI TTS narration playback
+  const narrationAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsCacheRef = useRef<Map<string, string>>(new Map()); // text -> object URL
+  const ttsUnavailableRef = useRef<boolean>(false); // once true, fall back to browser speechSynthesis
+
   const isEn = lang === "en";
 
-  // Load and subscribe to speechSynthesis voices
-  useEffect(() => {
+  // Stop any in-flight narration (both OpenAI audio and browser fallback)
+  const stopNarration = () => {
+    if (narrationAudioRef.current) {
+      narrationAudioRef.current.pause();
+    }
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
+  // Browser speechSynthesis fallback (used when OpenAI TTS is unavailable)
+  const speakWithBrowser = (text: string) => {
     if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = isEn ? "en-US" : "ko-KR";
+    const allVoices = window.speechSynthesis.getVoices();
+    const matchedLangVoice = allVoices.find(
+      (v) =>
+        v.lang.toLowerCase().includes(isEn ? "en" : "ko") &&
+        (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Siri") || v.name.includes("Microsoft"))
+    );
+    if (matchedLangVoice) utterance.voice = matchedLangVoice;
+    utterance.pitch = 0.88;
+    utterance.rate = voiceRate;
+    utterance.volume = 0.85;
+    window.speechSynthesis.speak(utterance);
+  };
 
-    const loadVoices = () => {
-      const allVoices = window.speechSynthesis.getVoices();
-      const koVoices = allVoices.filter(v => v.lang.startsWith("ko"));
-      setVoices(koVoices);
+  // Play a narration line via OpenAI TTS, caching audio per text. Falls back to
+  // the browser's speechSynthesis if the TTS endpoint is unavailable.
+  const playNarration = async (text: string) => {
+    stopNarration();
 
-      // Select highest quality default voice
-      if (koVoices.length > 0) {
-        const premiumVoice = koVoices.find(v => 
-          v.name.includes("Female") || 
-          v.name.includes("Google") || 
-          v.name.includes("Yuna") || 
-          v.name.includes("Kyuri") || 
-          v.name.includes("Premium") || 
-          v.name.includes("natural") || 
-          v.name.includes("Siri") || 
-          v.name.includes("Microsoft") ||
-          v.name.toLowerCase().includes("woman")
-        );
-        setSelectedVoiceName(prev => prev || (premiumVoice ? premiumVoice.name : koVoices[0].name));
+    if (ttsUnavailableRef.current) {
+      speakWithBrowser(text);
+      return;
+    }
+
+    const cacheKey = `${selectedVoiceName}|${voiceRate}|${text}`;
+    try {
+      let url = ttsCacheRef.current.get(cacheKey);
+      if (!url) {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text,
+            voice: selectedVoiceName,
+            instructions: ttsInstructions(isEn, voiceRate),
+          }),
+        });
+        if (!res.ok) throw new Error(`TTS request failed: ${res.status}`);
+        const blob = await res.blob();
+        url = URL.createObjectURL(blob);
+        ttsCacheRef.current.set(cacheKey, url);
       }
-    };
 
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-
-    return () => {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.onvoiceschanged = null;
+      if (!narrationAudioRef.current) {
+        narrationAudioRef.current = new Audio();
       }
-    };
-  }, []);
+      const audio = narrationAudioRef.current;
+      audio.src = url;
+      audio.volume = 0.9;
+      await audio.play();
+    } catch (err) {
+      console.warn("OpenAI TTS unavailable, falling back to browser voice:", err);
+      ttsUnavailableRef.current = true;
+      speakWithBrowser(text);
+    }
+  };
 
   // Initialize synthesis when component mounts or Solfeggio frequency changes
   useEffect(() => {
@@ -185,21 +244,20 @@ export function MeditationPlayback({
     return () => clearTimeout(timeoutId);
   }, [isEntering, isPaused, isFinished, selectedBreathingId, breathePhase]);
 
-  // Cleanup speech synthesis on unmount
+  // Cleanup narration audio and speech synthesis on unmount
   useEffect(() => {
     return () => {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      stopNarration();
+      // Release cached TTS audio blobs
+      ttsCacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+      ttsCacheRef.current.clear();
     };
   }, []);
 
   // Premium Voice Guidance & Subtitles Effect
   useEffect(() => {
     if (isEntering || isPaused || isFinished || !isVoiceEnabled) {
-      if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      stopNarration();
       if (isEntering || isPaused || isFinished) {
         setCurrentSubtitle(null);
       }
@@ -223,45 +281,8 @@ export function MeditationPlayback({
     if (currentLine) {
       setCurrentSubtitle(currentLine.text);
 
-      const speakBreathGuide = (text: string) => {
-        if (!window.speechSynthesis) return;
-        window.speechSynthesis.cancel();
-
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = isEn ? "en-US" : "ko-KR";
-
-        const allVoices = window.speechSynthesis.getVoices();
-        const matchedVoice = allVoices.find(v => v.name === selectedVoiceName);
-
-        if (matchedVoice) {
-          utterance.voice = matchedVoice;
-        } else {
-          // Locate premium natural female voices in English or Korean
-          const matchedLangVoice = allVoices.find(v => 
-            v.lang.toLowerCase().includes(isEn ? "en" : "ko") && 
-            (
-              v.name.includes("Female") || 
-              v.name.includes("Google") || 
-              v.name.includes("Samantha") || 
-              v.name.includes("Hazel") || 
-              v.name.includes("Premium") || 
-              v.name.includes("natural") || 
-              v.name.includes("Siri") || 
-              v.name.includes("Microsoft") ||
-              v.name.toLowerCase().includes("woman")
-            )
-          );
-          if (matchedLangVoice) utterance.voice = matchedLangVoice;
-        }
-
-        utterance.pitch = 0.88; // Calm, warm, deep female tone
-        utterance.rate = voiceRate;  // Beautiful slow meditation therapeutic cadence
-        utterance.volume = 0.85; // Blended volume
-
-        window.speechSynthesis.speak(utterance);
-      };
-
-      speakBreathGuide(currentLine.text);
+      // Premium narration via OpenAI TTS (falls back to browser voice on failure)
+      playNarration(currentLine.text);
 
       // Automatically clear subtitles after 7.5 seconds
       const subtitleTimeout = setTimeout(() => {
@@ -626,7 +647,7 @@ export function MeditationPlayback({
                   {/* Voice Selector */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] uppercase tracking-wider text-white/50 font-medium">
-                      보이스 선택 (내장 신경망 보이스 지원)
+                      보이스 선택 (OpenAI 뉴럴 보이스)
                     </label>
                     <select
                       id="voice-select-dropdown"
@@ -634,28 +655,15 @@ export function MeditationPlayback({
                       onChange={(e) => {
                         setSelectedVoiceName(e.target.value);
                         // Stop any ongoing guide speech immediately to avoid overlapping
-                        if (window.speechSynthesis) window.speechSynthesis.cancel();
+                        stopNarration();
                       }}
                       className="w-full bg-stone-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500/50 cursor-pointer"
                     >
-                      {voices.length === 0 ? (
-                        <option value="">기본 한국어 보이스 (OS 내장)</option>
-                      ) : (
-                        voices.map((v) => {
-                          let labelName = v.name;
-                          // Clean up label names to look incredibly professional & natural
-                          if (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Neural") || v.name.includes("Yuna") || v.name.includes("Kyuri") || v.name.includes("Siri")) {
-                            labelName = `✨ ${v.name.replace(/Microsoft|Google|Apple/g, '').trim()} (추천: 내추럴 AI 보이스)`;
-                          } else {
-                            labelName = `${v.name.trim()} (기본)`;
-                          }
-                          return (
-                            <option key={v.name} value={v.name}>
-                              {labelName}
-                            </option>
-                          );
-                        })
-                      )}
+                      {OPENAI_VOICES.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          ✨ {v.label} — {v.desc}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
@@ -689,18 +697,12 @@ export function MeditationPlayback({
                   <button
                     id="playback-btn-test-voice"
                     onClick={() => {
-                      if (!window.speechSynthesis) return;
-                      // Instantly play sample with chosen settings
-                      window.speechSynthesis.cancel();
-                      const utterance = new SpeechSynthesisUtterance("숨을 깊이 들이마십니다. 차분한 평온함이 가득 채워집니다.");
-                      utterance.lang = "ko-KR";
-                      const allVoices = window.speechSynthesis.getVoices();
-                      const matchedVoice = allVoices.find(v => v.name === selectedVoiceName);
-                      if (matchedVoice) utterance.voice = matchedVoice;
-                      utterance.pitch = 0.88;
-                      utterance.rate = voiceRate;
-                      utterance.volume = 0.9;
-                      window.speechSynthesis.speak(utterance);
+                      // Instantly play sample with chosen OpenAI voice settings
+                      playNarration(
+                        isEn
+                          ? "Breathe in deeply. A calm, gentle peace fills you completely."
+                          : "숨을 깊이 들이마십니다. 차분한 평온함이 가득 채워집니다."
+                      );
                     }}
                     className="w-full mt-1.5 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-300 rounded-lg border border-orange-500/20 text-xs font-medium cursor-pointer transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-1.5"
                   >
@@ -709,7 +711,7 @@ export function MeditationPlayback({
                   </button>
 
                   <div className="text-[9px] text-white/40 leading-relaxed text-center mt-1">
-                    * 구글 크롬, Edge, 웨일 브라우저 이용 시<br />가장 자연스러운 전문가 수준의 신경망 AI 보이스가 제공됩니다.
+                    * OpenAI 뉴럴 TTS로 생성되는 고품질 보이스입니다.<br />API 키 미설정 시 브라우저 내장 음성으로 자동 전환됩니다.
                   </div>
                 </motion.div>
               )}
@@ -867,8 +869,8 @@ export function MeditationPlayback({
                   onClick={() => {
                     const newVoiceState = !isVoiceEnabled;
                     setIsVoiceEnabled(newVoiceState);
-                    if (!newVoiceState && window.speechSynthesis) {
-                      window.speechSynthesis.cancel();
+                    if (!newVoiceState) {
+                      stopNarration();
                       setCurrentSubtitle(null);
                     }
                   }}
