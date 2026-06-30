@@ -10,6 +10,34 @@ export interface MoodAnalysisInput {
   lang?: string;
 }
 
+// Theme-aware spoken narration used when the AI call is unavailable.
+function getFallbackNarration(theme: string, isEn: boolean): string[] {
+  const opener: Record<string, { ko: string; en: string }> = {
+    fire: { ko: "타오르는 불꽃에 가만히 시선을 두어 봅니다.", en: "Let your gaze rest softly on the glowing flames." },
+    water: { ko: "푸르고 잔잔한 물속에 마음을 띄워 봅니다.", en: "Let your mind float in the calm blue water." },
+    wave: { ko: "밀려오는 파도 소리에 가만히 귀 기울여 봅니다.", en: "Gently listen to the waves rolling to the shore." },
+    cloud: { ko: "느리게 흘러가는 구름을 바라봅니다.", en: "Watch the slow clouds drifting across the sky." },
+    rain: { ko: "창을 적시는 빗소리에 마음을 맡겨 봅니다.", en: "Let the soft sound of rain hold your mind." },
+  };
+  const first = (opener[theme] || opener.cloud)[isEn ? "en" : "ko"];
+
+  return isEn
+    ? [
+        first,
+        "Slowly draw a breath in… and let it gently go.",
+        "With each exhale, release the weight of today.",
+        "If thoughts arise, just let them drift away.",
+        "You are enough. Simply rest in this stillness.",
+      ]
+    : [
+        first,
+        "천천히 숨을 들이마시고… 부드럽게 내쉽니다.",
+        "내쉬는 숨마다 오늘의 무게를 조금씩 내려놓아요.",
+        "생각이 떠올라도 괜찮아요. 그저 흘려보냅니다.",
+        "지금 이대로 충분합니다. 이 고요에 머물러요.",
+      ];
+}
+
 // Fallback logic for when the OpenAI API is unavailable or throws an error
 export function getFallbackParams(theme: string, moodQuick: string, moodText: string, lang: string = "ko") {
   let colors: string[] = ["#000000", "#000000"];
@@ -225,6 +253,7 @@ export function getFallbackParams(theme: string, moodQuick: string, moodText: st
     greeting: greeting || (isEn ? `A healing space curated for your ${moodName} mood.` : `${moodName}의 기분을 다독여 줄 오늘의 힐링 공간입니다.`),
     affirmation: affirmation || (isEn ? "Completed your deep staring session. May your mind remain calm." : "오늘의 온전한 멍때리기를 마쳤습니다. 마음이 차분해졌기를 바라요."),
     ambientNoiseLevel,
+    narration: getFallbackNarration(theme, isEn),
   };
 }
 
@@ -266,7 +295,8 @@ export async function analyzeMood({ theme, moodText, moodQuick, lang = "ko" }: M
         "soundSpeed": number, // Synthesizer speed/modulation between 0.5 and 1.8.
         "greeting": string, // Under 50 characters. Beautiful opening comfort quote addressing their state and theme. MUST BE written in ${isEn ? "ENGLISH" : "KOREAN"}. (e.g. ${isEn ? '"Let go of your busy day and melt your mind into this quiet water."' : '"불안했던 오늘의 하루, 잔잔한 수면에 모두 흘려보내 보아요."'})
         "affirmation": string, // Under 50 characters. Peaceful closing message. MUST BE written in ${isEn ? "ENGLISH" : "KOREAN"}. (e.g. ${isEn ? '"May your long night be a little more gentle and peaceful."' : '"당신의 긴 밤이 조금 더 부드럽고 온화하기를 바랍니다."'})
-        "ambientNoiseLevel": number // Volume multiplier between 0.2 and 0.7.
+        "ambientNoiseLevel": number, // Volume multiplier between 0.2 and 0.7.
+        "narration": [string, string, string, string, string] // EXACTLY 5 sequential spoken meditation-guidance lines, read aloud one by one over the session. They MUST be specific to the "${theme}" theme imagery and the user's "${moodQuick || "calm"}" mood — reference the theme's scenery (e.g. flames, water, waves, clouds, rain) and gently address the mood. Arc: (1) settle in & notice the scene, (2) guide a slow breath, (3) release today's tension, (4) let thoughts drift away, (5) rest in stillness. Each under 60 characters, warm and calm. MUST BE written in ${isEn ? "ENGLISH" : "KOREAN"}.
       }
     `;
 
@@ -289,6 +319,10 @@ export async function analyzeMood({ theme, moodText, moodQuick, lang = "ko" }: M
       typeof parsed.greeting === "string" &&
       typeof parsed.affirmation === "string"
     ) {
+      // Guarantee usable narration even if the model omits or malforms it.
+      if (!Array.isArray(parsed.narration) || parsed.narration.some((l: unknown) => typeof l !== "string")) {
+        parsed.narration = getFallbackNarration(theme, isEn);
+      }
       return parsed;
     }
     throw new Error("Invalid response format from OpenAI");

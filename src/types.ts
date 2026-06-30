@@ -49,5 +49,6 @@ export interface AIParams {
   greeting: string; // opening message from AI
   affirmation: string; // closing message from AI
   ambientNoiseLevel: number; // 0.1 to 0.8
+  narration?: string[]; // sequential spoken guidance lines tailored to theme + mood
 }
 

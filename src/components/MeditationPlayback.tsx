@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Play, Pause, X, Volume2, VolumeX, Sparkles, RefreshCw, Mic, MicOff, Settings, Heart } from "lucide-react";
 import { ThemeId, AIParams, BreathingId, MusicId, ColorId, MoodQuickId } from "../types";
@@ -91,6 +91,31 @@ export function MeditationPlayback({
   const ttsUnavailableRef = useRef<boolean>(false); // once true, fall back to browser speechSynthesis
 
   const isEn = lang === "en";
+
+  // Build the spoken-guidance schedule from the AI-tailored narration (falls
+  // back to a generic arc), spread across the first ~80% of the session so the
+  // lines actually match the theme/mood and don't all fire in the first 20s.
+  const narrationSchedule = useMemo(() => {
+    const generic = isEn
+      ? [
+          "Gently sink into deep silence. Breathe comfortably.",
+          "Slowly draw a breath in, then exhale peacefully.",
+          "Let go of all busy thoughts, and embrace this quiet stillness.",
+        ]
+      : [
+          "깊은 멍의 침묵 속으로 들어가 봅니다. 편안하게 호흡을 시작하세요.",
+          "천천히 숨을 들이마시고 편안하게 내쉽니다.",
+          "이제 모든 생각을 내려놓고, 고요하고 아늑한 침묵을 즐겨보세요.",
+        ];
+    const lines = params.narration && params.narration.length > 0 ? params.narration : generic;
+    const totalSec = duration * 60;
+    const span = Math.max(16, totalSec * 0.8);
+    const startAt = 3;
+    return lines.map((text, i) => ({
+      second: lines.length === 1 ? startAt : Math.round(startAt + (i / (lines.length - 1)) * span),
+      text,
+    }));
+  }, [params.narration, duration, isEn]);
 
   // Stop any in-flight narration (both OpenAI audio and browser fallback)
   const stopNarration = () => {
@@ -321,18 +346,8 @@ export function MeditationPlayback({
 
     const elapsed = duration * 60 - timeLeft;
 
-    // Rhythmic, highly professional, slow pacing meditation voice narration scripts
-    const narrationScript = isEn ? [
-      { second: 1, text: "Gently sink into deep silence. Breathe comfortably." },
-      { second: 10, text: "Slowly draw a breath in, then exhale peacefully." },
-      { second: 20, text: "Now let go of all busy thoughts, and embrace this quiet stillness." }
-    ] : [
-      { second: 1, text: "깊은 멍의 침묵 속으로 들어가 봅니다. 편안하게 호흡을 시작하세요." },
-      { second: 10, text: "천천히 숨을 들이마시고 편안하게 내쉽니다." },
-      { second: 20, text: "이제 모든 생각을 내려놓고, 고요하고 아늑한 침묵을 즐겨보세요." }
-    ];
-
-    const currentLine = narrationScript.find(item => item.second === elapsed);
+    // Theme/mood-tailored narration, spread across the session (see narrationSchedule)
+    const currentLine = narrationSchedule.find(item => item.second === elapsed);
     if (currentLine) {
       setCurrentSubtitle(currentLine.text);
 
@@ -346,7 +361,15 @@ export function MeditationPlayback({
 
       return () => clearTimeout(subtitleTimeout);
     }
-  }, [timeLeft, isEntering, isPaused, isFinished, isVoiceEnabled, duration, selectedVoiceName, voiceRate, isEn]);
+  }, [timeLeft, isEntering, isPaused, isFinished, isVoiceEnabled, duration, selectedVoiceName, voiceRate, isEn, narrationSchedule]);
+
+  // Speak the AI closing affirmation once when the session completes
+  useEffect(() => {
+    if (isFinished && isVoiceEnabled && params.affirmation) {
+      const t = setTimeout(() => playNarration(params.affirmation), 900);
+      return () => clearTimeout(t);
+    }
+  }, [isFinished]);
 
   // Handle session completion transitions
   const handleSessionCompletion = () => {
