@@ -444,24 +444,32 @@ export async function synthesizeSpeech({ text, voice = "shimmer", instructions }
   const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const safeVoice = (TTS_VOICES as readonly string[]).includes(voice) ? voice : "shimmer";
 
-  const response = await ai.audio.speech.create({
-    model: "gpt-4o-mini-tts",
-    voice: safeVoice as TtsVoice,
-    input: text,
-    instructions:
-      instructions ||
-      [
-        "Identity: A professional meditation and yoga instructor guiding a late-night relaxation session.",
-        "Voice affect: Soft, warm, feminine, deeply soothing and intimate.",
-        "Tone: Serene, nurturing, tranquil — never bright, energetic, or announcer-like.",
-        "Delivery: Breathy, hushed, relaxed, with soft falling intonation and slightly lowered pitch.",
-        "Pacing: Extremely slow and spacious, leaving long, calm silences between sentences.",
-      ].join("\n"),
-    response_format: "mp3",
-  });
+  try {
+    const response = await ai.audio.speech.create({
+      model: "gpt-4o-mini-tts",
+      voice: safeVoice as TtsVoice,
+      input: text,
+      instructions:
+        instructions ||
+        [
+          "Identity: A professional meditation and yoga instructor guiding a late-night relaxation session.",
+          "Voice affect: Soft, warm, feminine, deeply soothing and intimate.",
+          "Tone: Serene, nurturing, tranquil — never bright, energetic, or announcer-like.",
+          "Delivery: Breathy, hushed, relaxed, with soft falling intonation and slightly lowered pitch.",
+          "Pacing: Extremely slow and spacious, leaving long, calm silences between sentences.",
+        ].join("\n"),
+      response_format: "mp3",
+    });
 
-  const arrayBuffer = await response.arrayBuffer();
-  return { audio: Buffer.from(arrayBuffer), contentType: "audio/mpeg", engine: "openai" };
+    const arrayBuffer = await response.arrayBuffer();
+    return { audio: Buffer.from(arrayBuffer), contentType: "audio/mpeg", engine: "openai" };
+  } catch (openaiErr) {
+    // Surface BOTH failures so the client diagnostic can tell why ElevenLabs
+    // (the preferred engine) was skipped and why the OpenAI fallback also failed.
+    const parts = [`OpenAI TTS failed: ${errMessage(openaiErr)}`];
+    if (hasElevenLabsKey()) parts.push(`ElevenLabs also failed: ${errMessage(elevenLabsError)}`);
+    throw new Error(parts.join(" | "));
+  }
 }
 
 function errMessage(err: unknown): string {
