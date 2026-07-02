@@ -376,9 +376,30 @@ export const ELEVENLABS_VOICES = [
 const hasElevenLabsKey = () =>
   !!process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY !== "";
 
+// Non-secret snapshot of which API credentials the running deployment can see.
+// Used by /api/health so misconfigured keys can be diagnosed without exposing them.
+export function keyStatus() {
+  return {
+    openai: hasApiKey(),
+    elevenlabs: hasElevenLabsKey(),
+    blob: !!process.env.BLOB_READ_WRITE_TOKEN,
+  };
+}
+
+export type TtsEngine = "elevenlabs" | "openai";
+
+export interface SpeechResult {
+  audio: Buffer;
+  contentType: string;
+  engine: TtsEngine;
+}
+
 // Synthesize speech — prefers ElevenLabs, falls back to OpenAI TTS.
-// Throws only when neither key is available.
-export async function synthesizeSpeech({ text, voice = "shimmer", instructions }: SpeechInput) {
+// Throws only when neither engine can produce audio. The returned `engine`
+// field lets callers surface which backend actually served the audio.
+export async function synthesizeSpeech({ text, voice = "shimmer", instructions }: SpeechInput): Promise<SpeechResult> {
+  let elevenLabsError: unknown = null;
+
   // ElevenLabs path (better quality)
   if (hasElevenLabsKey()) {
     try {
@@ -405,15 +426,19 @@ export async function synthesizeSpeech({ text, voice = "shimmer", instructions }
       for await (const chunk of audioStream) {
         chunks.push(Buffer.from(chunk));
       }
-      return { audio: Buffer.concat(chunks), contentType: "audio/mpeg" };
+      return { audio: Buffer.concat(chunks), contentType: "audio/mpeg", engine: "elevenlabs" };
     } catch (err) {
+      elevenLabsError = err;
       console.warn("ElevenLabs TTS failed, falling back to OpenAI TTS:", err);
     }
   }
 
   // OpenAI TTS fallback
   if (!hasApiKey()) {
-    throw new Error("No TTS API key configured (ELEVENLABS_API_KEY or OPENAI_API_KEY)");
+    const detail = hasElevenLabsKey()
+      ? `ElevenLabs failed and OPENAI_API_KEY is missing. EL error: ${errMessage(elevenLabsError)}`
+      : "No TTS API key configured (ELEVENLABS_API_KEY or OPENAI_API_KEY).";
+    throw new Error(detail);
   }
 
   const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -436,7 +461,17 @@ export async function synthesizeSpeech({ text, voice = "shimmer", instructions }
   });
 
   const arrayBuffer = await response.arrayBuffer();
-  return { audio: Buffer.from(arrayBuffer), contentType: "audio/mpeg" };
+  return { audio: Buffer.from(arrayBuffer), contentType: "audio/mpeg", engine: "openai" };
+}
+
+function errMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
 }
 
 // --- AI background image generation (gpt-image-1) ---

@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { analyzeMood, synthesizeSpeech, getOrCreateBackground } from "./lib/openai.js";
+import { analyzeMood, synthesizeSpeech, getOrCreateBackground, keyStatus } from "./lib/openai.js";
 
 dotenv.config();
 
@@ -32,15 +32,27 @@ app.post("/api/tts", async (req, res) => {
   }
 
   try {
-    const { audio, contentType } = await synthesizeSpeech({ text, voice, instructions });
+    const { audio, contentType, engine } = await synthesizeSpeech({ text, voice, instructions });
     res.set("Content-Type", contentType);
     res.set("Cache-Control", "public, max-age=86400");
+    res.set("X-TTS-Engine", engine);
     return res.send(audio);
   } catch (error) {
-    console.error("OpenAI TTS error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("TTS error:", message);
     // 503 signals the client to gracefully fall back to browser speechSynthesis.
-    return res.status(503).json({ error: "tts_unavailable" });
+    return res.status(503).json({ error: "tts_unavailable", detail: message, keys: keyStatus() });
   }
+});
+
+// Diagnostic: which API credentials this process can see (booleans only).
+app.get("/api/health", (_req, res) => {
+  const keys = keyStatus();
+  res.json({
+    ok: true,
+    keys,
+    tts: keys.elevenlabs ? "elevenlabs" : keys.openai ? "openai" : "browser-fallback",
+  });
 });
 
 // REST API for AI ambient background image using OpenAI gpt-image-1
