@@ -39,6 +39,25 @@ export interface TherapyConfig {
   colorId: ColorId;
 }
 
+export interface ProgramDay {
+  day: number;
+  title: string;
+  englishTitle: string;
+  theme: ThemeId;
+  mood: MoodQuickId;
+  durationMin: number;
+}
+
+export interface Program {
+  id: string;
+  name: string;
+  englishName: string;
+  description: string;
+  englishDescription: string;
+  gradient: string;
+  days: ProgramDay[];
+}
+
 export interface AIParams {
   colors: string[]; // 2 or 3 hex colors representing the mood gradient
   speedMultiplier: number; // 0.2 to 2.0

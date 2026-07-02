@@ -1,15 +1,17 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Sparkles, Globe, X, HeartHandshake, Compass, Layers, Headset, Volume2, Flame } from "lucide-react";
-import { ThemeId, MoodQuickId, AIParams } from "./types";
+import { ThemeId, MoodQuickId, AIParams, Program, ProgramDay } from "./types";
 import { ThemeSelector } from "./components/ThemeSelector";
 import { MoodInput } from "./components/MoodInput";
 import { DurationSelector } from "./components/DurationSelector";
 import { MeditationPlayback } from "./components/MeditationPlayback";
 import { StatsModal } from "./components/StatsModal";
+import { ProgramsView, ProgramDetail } from "./components/Programs";
 import { getStats } from "./lib/history";
+import { markDayComplete } from "./lib/programProgress";
 
-type Stage = "theme" | "mood" | "duration" | "loading" | "meditation";
+type Stage = "theme" | "mood" | "duration" | "loading" | "meditation" | "programs" | "program";
 
 export default function App() {
   const [stage, setStage] = useState<Stage>("theme");
@@ -21,27 +23,23 @@ export default function App() {
   const [lang, setLang] = useState<"ko" | "en">("ko");
   const [showGlobalModal, setShowGlobalModal] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [activeProgram, setActiveProgram] = useState<{ id: string; day: number } | null>(null);
 
   const isEn = lang === "en";
 
   // Refresh stats whenever we return to a setup stage (e.g. after a session)
   const stats = useMemo(() => getStats(), [stage]);
 
-  // Trigger OpenAI API call to analyze mood and generate parameters
-  const handleStartAnalysis = async () => {
-    if (!selectedTheme) return;
+  // Run mood analysis with explicit inputs, then enter the meditation stage.
+  const analyzeAndStart = async (theme: ThemeId, moodQuick: MoodQuickId, moodTextValue: string) => {
     setStage("loading");
 
     try {
       const response = await fetch("/api/analyze-mood", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          theme: selectedTheme,
-          moodText,
-          moodQuick: selectedMood,
-          lang,
-        }),
+        body: JSON.stringify({ theme, moodText: moodTextValue, moodQuick, lang }),
       });
 
       if (!response.ok) {
@@ -50,7 +48,7 @@ export default function App() {
 
       const params: AIParams = await response.json();
       setAiParams(params);
-      
+
       // Delay slightly for visual pacing and immersion
       setTimeout(() => {
         setStage("meditation");
@@ -65,7 +63,7 @@ export default function App() {
         glow: 0.8,
         pitch: 110,
         soundSpeed: 0.8,
-        greeting: isEn 
+        greeting: isEn
           ? "Welcome to this quiet space of rest. Draw your breath in and out slowly."
           : "고요한 쉼의 공간에 들어오신 것을 환영합니다. 천천히 숨을 들이쉬고 내쉬어 보세요.",
         affirmation: isEn
@@ -80,8 +78,39 @@ export default function App() {
     }
   };
 
+  // Quick-flow entry (theme → mood → duration wizard)
+  const handleStartAnalysis = async () => {
+    if (!selectedTheme) return;
+    setActiveProgram(null);
+    analyzeAndStart(selectedTheme, selectedMood, moodText);
+  };
+
+  // Program-flow entry: preset the session from a program day, then start
+  const startProgramDay = (program: Program, day: ProgramDay) => {
+    setSelectedTheme(day.theme);
+    setSelectedMood(day.mood);
+    setDuration(day.durationMin);
+    setMoodText("");
+    setActiveProgram({ id: program.id, day: day.day });
+    analyzeAndStart(day.theme, day.mood, "");
+  };
+
+  // Called by MeditationPlayback when a session completes
+  const handleMeditationComplete = () => {
+    if (activeProgram) {
+      markDayComplete(activeProgram.id, activeProgram.day);
+    }
+  };
+
   const handleResetSession = () => {
-    setStage("theme");
+    // After a program session, return to that program's detail to show progress
+    if (activeProgram) {
+      setSelectedProgramId(activeProgram.id);
+      setStage("program");
+    } else {
+      setStage("theme");
+    }
+    setActiveProgram(null);
     setSelectedTheme(null);
     setMoodText("");
     setSelectedMood("calm");
@@ -105,7 +134,22 @@ export default function App() {
             <p className="text-[10px] opacity-40 font-light tracking-[0.2em] uppercase">AI Healing Atmosphere</p>
           </div>
           
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6">
+            {/* Programs entry */}
+            <button
+              id="programs-nav-btn"
+              onClick={() => setStage("programs")}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-all cursor-pointer relative z-20 text-[11px] font-medium ${
+                stage === "programs" || stage === "program"
+                  ? "border-orange-500/50 bg-orange-500/10 text-orange-300"
+                  : "border-white/10 bg-white/[0.03] text-stone-400 hover:text-stone-200 hover:border-white/20"
+              }`}
+              title={isEn ? "Guided programs" : "가이드 프로그램"}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>{isEn ? "Programs" : "프로그램"}</span>
+            </button>
+
             {/* Streak / history badge */}
             <button
               id="stats-badge-btn"
@@ -260,6 +304,44 @@ export default function App() {
             </motion.div>
           )}
 
+          {stage === "programs" && (
+            <motion.div
+              key="programs-stage"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.4 }}
+              className="w-full"
+            >
+              <ProgramsView
+                onSelectProgram={(id) => {
+                  setSelectedProgramId(id);
+                  setStage("program");
+                }}
+                onBack={() => setStage("theme")}
+                lang={lang}
+              />
+            </motion.div>
+          )}
+
+          {stage === "program" && selectedProgramId && (
+            <motion.div
+              key="program-detail-stage"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.4 }}
+              className="w-full"
+            >
+              <ProgramDetail
+                programId={selectedProgramId}
+                onStartDay={startProgramDay}
+                onBack={() => setStage("programs")}
+                lang={lang}
+              />
+            </motion.div>
+          )}
+
           {stage === "meditation" && aiParams && selectedTheme && (
             <motion.div
               key="meditation-stage"
@@ -274,6 +356,7 @@ export default function App() {
                 duration={duration}
                 moodQuick={selectedMood}
                 onExit={handleResetSession}
+                onComplete={handleMeditationComplete}
                 lang={lang}
               />
             </motion.div>

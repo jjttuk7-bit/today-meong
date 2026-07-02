@@ -12,6 +12,7 @@ interface MeditationPlaybackProps {
   duration: number; // in minutes
   moodQuick?: MoodQuickId;
   onExit: () => void;
+  onComplete?: () => void;
   lang: "ko" | "en";
 }
 
@@ -70,6 +71,7 @@ export function MeditationPlayback({
   duration,
   moodQuick,
   onExit,
+  onComplete,
   lang,
 }: MeditationPlaybackProps) {
   const { initSynth, fadeOutAndStop, setVolume } = useSound();
@@ -398,6 +400,7 @@ export function MeditationPlayback({
     setIsFinished(true);
     // Record the completed session for history / streaks
     addSession({ theme, mood: moodQuick || "calm", durationMin: duration, completed: true });
+    onComplete?.();
     // Smoothly fade-out sound over 2.5s
     fadeOutAndStop();
   };
