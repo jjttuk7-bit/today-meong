@@ -367,9 +367,9 @@ export interface SpeechInput {
 
 // Korean-optimized ElevenLabs voices (multilingual_v2 model supports Korean well)
 export const ELEVENLABS_VOICES = [
-  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda",    desc: "따뜻한 여성 (추천)" },
+  { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi",       desc: "차분한 여성 (추천)" },
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda",    desc: "따뜻한 여성" },
   { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",     desc: "부드러운 여성" },
-  { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi",       desc: "차분한 여성" },
   { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella",      desc: "포근한 여성" },
 ] as const;
 

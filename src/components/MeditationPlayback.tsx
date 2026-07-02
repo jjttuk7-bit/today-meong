@@ -34,9 +34,9 @@ const BREATHING_PATTERNS: Record<
 
 // Voice list — ElevenLabs first (higher quality), OpenAI as fallback
 const OPENAI_VOICES: { id: string; label: string; desc: string }[] = [
-  { id: "XrExE9yKIg1WjnnlVkGX", label: "Matilda ✨", desc: "따뜻한 여성 · ElevenLabs (추천)" },
+  { id: "AZnzlk1XvdvUeBnXmlld", label: "Domi ✨",    desc: "차분한 여성 · ElevenLabs (추천)" },
+  { id: "XrExE9yKIg1WjnnlVkGX", label: "Matilda ✨", desc: "따뜻한 여성 · ElevenLabs" },
   { id: "21m00Tcm4TlvDq8ikWAM", label: "Rachel ✨",  desc: "부드러운 여성 · ElevenLabs" },
-  { id: "AZnzlk1XvdvUeBnXmlld", label: "Domi ✨",    desc: "차분한 여성 · ElevenLabs" },
   { id: "EXAVITQu4vr4xnSDxMaL", label: "Bella ✨",   desc: "포근한 여성 · ElevenLabs" },
   { id: "shimmer",               label: "Shimmer",   desc: "따뜻한 여성 · OpenAI" },
   { id: "coral",                 label: "Coral",     desc: "부드러운 여성 · OpenAI" },
@@ -94,7 +94,7 @@ export function MeditationPlayback({
   const [selectedColorId, setSelectedColorId] = useState<ColorId>("off");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
-  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("XrExE9yKIg1WjnnlVkGX"); // ElevenLabs Matilda (fallback: OpenAI shimmer)
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("AZnzlk1XvdvUeBnXmlld"); // ElevenLabs Domi (fallback: OpenAI shimmer)
   const [voiceRate, setVoiceRate] = useState<number>(0.68); // ultra calm meditation pace
   const [showVoicePanel, setShowVoicePanel] = useState<boolean>(false);
   const [showTherapyPanel, setShowTherapyPanel] = useState<boolean>(false);
