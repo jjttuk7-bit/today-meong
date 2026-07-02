@@ -4,6 +4,7 @@ import { Play, Pause, X, Volume2, VolumeX, Sparkles, RefreshCw, Mic, MicOff, Set
 import { ThemeId, AIParams, BreathingId, MusicId, ColorId, MoodQuickId } from "../types";
 import { Visualizer } from "./Visualizer";
 import { useSound } from "../hooks/useSound";
+import { addSession } from "../lib/history";
 
 interface MeditationPlaybackProps {
   theme: ThemeId;
@@ -394,6 +395,8 @@ export function MeditationPlayback({
   // Handle session completion transitions
   const handleSessionCompletion = () => {
     setIsFinished(true);
+    // Record the completed session for history / streaks
+    addSession({ theme, mood: moodQuick || "calm", durationMin: duration, completed: true });
     // Smoothly fade-out sound over 2.5s
     fadeOutAndStop();
   };

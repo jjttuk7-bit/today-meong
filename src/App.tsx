@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Sparkles, Globe, X, HeartHandshake, Compass, Layers, Headset, Volume2 } from "lucide-react";
+import { Sparkles, Globe, X, HeartHandshake, Compass, Layers, Headset, Volume2, Flame } from "lucide-react";
 import { ThemeId, MoodQuickId, AIParams } from "./types";
 import { ThemeSelector } from "./components/ThemeSelector";
 import { MoodInput } from "./components/MoodInput";
 import { DurationSelector } from "./components/DurationSelector";
 import { MeditationPlayback } from "./components/MeditationPlayback";
+import { StatsModal } from "./components/StatsModal";
+import { getStats } from "./lib/history";
 
 type Stage = "theme" | "mood" | "duration" | "loading" | "meditation";
 
@@ -18,8 +20,12 @@ export default function App() {
   const [aiParams, setAiParams] = useState<AIParams | null>(null);
   const [lang, setLang] = useState<"ko" | "en">("ko");
   const [showGlobalModal, setShowGlobalModal] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
 
   const isEn = lang === "en";
+
+  // Refresh stats whenever we return to a setup stage (e.g. after a session)
+  const stats = useMemo(() => getStats(), [stage]);
 
   // Trigger OpenAI API call to analyze mood and generate parameters
   const handleStartAnalysis = async () => {
@@ -100,6 +106,19 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-6">
+            {/* Streak / history badge */}
+            <button
+              id="stats-badge-btn"
+              onClick={() => setShowStatsModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/10 hover:border-orange-500/40 hover:bg-orange-500/5 transition-all cursor-pointer relative z-20"
+              title={isEn ? "My Meong journey" : "나의 멍 기록"}
+            >
+              <Flame className={`w-3.5 h-3.5 ${stats.currentStreak > 0 ? "text-orange-500 fill-orange-500/30" : "text-stone-500"}`} />
+              <span className={`text-[11px] font-mono font-medium ${stats.currentStreak > 0 ? "text-orange-300" : "text-stone-500"}`}>
+                {stats.currentStreak}
+              </span>
+            </button>
+
             {/* Lang switcher toggle button */}
             <div className="flex bg-white/[0.03] border border-white/10 rounded-full p-0.5 relative z-20">
               <button
@@ -280,6 +299,11 @@ export default function App() {
           <span className="opacity-60">2026 &copy; TODAY'S MEONG</span>
         </footer>
       )}
+
+      {/* MY MEONG JOURNEY — HISTORY & STREAKS MODAL */}
+      <AnimatePresence>
+        {showStatsModal && <StatsModal onClose={() => setShowStatsModal(false)} lang={lang} />}
+      </AnimatePresence>
 
       {/* IMMERSIVE GLOBAL HORIZON PLAN BENTO MODAL */}
       <AnimatePresence>
