@@ -94,10 +94,20 @@ export function MeditationPlayback({
   const [selectedColorId, setSelectedColorId] = useState<ColorId>("off");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
-  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("AZnzlk1XvdvUeBnXmlld"); // ElevenLabs Domi (fallback: OpenAI shimmer)
-  const [voiceRate, setVoiceRate] = useState<number>(0.68); // ultra calm meditation pace
+  const VOICE_KEY = "meong.voice.v1";
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(VOICE_KEY) || "AZnzlk1XvdvUeBnXmlld";
+    }
+    return "AZnzlk1XvdvUeBnXmlld"; // ElevenLabs Domi
+  });
+  const [voiceRate, setVoiceRate] = useState<number>(0.68);
   const [showVoicePanel, setShowVoicePanel] = useState<boolean>(false);
   const [showTherapyPanel, setShowTherapyPanel] = useState<boolean>(false);
+
+  // Refs so showControlsTemporarily can read panel state without stale closures
+  const showVoicePanelRef = useRef(false);
+  const showTherapyPanelRef = useRef(false);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -417,13 +427,36 @@ export function MeditationPlayback({
     showControlsTemporarily();
   };
 
+  // Keep controls visible while any settings panel is open; restart 4.5s timer otherwise.
   const showControlsTemporarily = () => {
     setControlsVisible(true);
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
-    
+    if (showVoicePanelRef.current || showTherapyPanelRef.current) return; // panel open → no auto-hide
     controlsTimeoutRef.current = setTimeout(() => {
-      setControlsVisible(false);
-    }, 4500); // hide control bars after 4.5s of inactivity
+      if (!showVoicePanelRef.current && !showTherapyPanelRef.current) {
+        setControlsVisible(false);
+      }
+    }, 4500);
+  };
+
+  // Sync ref + state, then restart the auto-hide countdown when a panel closes.
+  const openVoicePanel = (open: boolean) => {
+    showVoicePanelRef.current = open;
+    setShowVoicePanel(open);
+    if (!open) showControlsTemporarily(); // restart timer once closed
+  };
+
+  const openTherapyPanel = (open: boolean) => {
+    showTherapyPanelRef.current = open;
+    setShowTherapyPanel(open);
+    if (!open) showControlsTemporarily();
+  };
+
+  // Persist voice selection across sessions
+  const changeVoice = (voiceId: string) => {
+    setSelectedVoiceName(voiceId);
+    localStorage.setItem(VOICE_KEY, voiceId);
+    stopNarration();
   };
 
   const togglePause = () => {
@@ -744,8 +777,8 @@ export function MeditationPlayback({
                       <Mic className="w-4 h-4" />
                       전문가 목소리 가이드 설정
                     </span>
-                    <button 
-                      onClick={() => setShowVoicePanel(false)}
+                    <button
+                      onClick={() => openVoicePanel(false)}
                       className="text-white/40 hover:text-white/80 p-1 cursor-pointer"
                     >
                       <X className="w-4 h-4" />
@@ -760,11 +793,7 @@ export function MeditationPlayback({
                     <select
                       id="voice-select-dropdown"
                       value={selectedVoiceName}
-                      onChange={(e) => {
-                        setSelectedVoiceName(e.target.value);
-                        // Stop any ongoing guide speech immediately to avoid overlapping
-                        stopNarration();
-                      }}
+                      onChange={(e) => changeVoice(e.target.value)}
                       className="w-full bg-stone-900 border border-white/15 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-orange-500/50 cursor-pointer"
                     >
                       {OPENAI_VOICES.map((v) => (
@@ -840,8 +869,8 @@ export function MeditationPlayback({
                       <Heart className="w-4 h-4 fill-emerald-400/10" />
                       인테그레이티드 테라피 시너지 설정
                     </span>
-                    <button 
-                      onClick={() => setShowTherapyPanel(false)}
+                    <button
+                      onClick={() => openTherapyPanel(false)}
                       className="text-white/40 hover:text-white/80 p-1 cursor-pointer"
                     >
                       <X className="w-4 h-4" />
@@ -996,8 +1025,8 @@ export function MeditationPlayback({
                 <button
                   id="playback-btn-voice-settings"
                   onClick={() => {
-                    setShowVoicePanel(!showVoicePanel);
-                    setShowTherapyPanel(false);
+                    openVoicePanel(!showVoicePanel);
+                    openTherapyPanel(false);
                   }}
                   className={`p-2.5 rounded-full transition-all duration-300 cursor-pointer active:scale-90 flex items-center gap-1 border ${
                     showVoicePanel 
@@ -1013,8 +1042,8 @@ export function MeditationPlayback({
                 <button
                   id="playback-btn-therapy-settings"
                   onClick={() => {
-                    setShowTherapyPanel(!showTherapyPanel);
-                    setShowVoicePanel(false);
+                    openTherapyPanel(!showTherapyPanel);
+                    openVoicePanel(false);
                   }}
                   className={`p-2.5 rounded-full transition-all duration-300 cursor-pointer active:scale-90 flex items-center gap-1 border ${
                     showTherapyPanel 
