@@ -32,14 +32,15 @@ const BREATHING_PATTERNS: Record<
   box: { inhale: 4, hold: 4, exhale: 4, hold_empty: 4 },
 };
 
-// Curated OpenAI TTS voices well-suited to a calm meditation guide.
+// Voice list — ElevenLabs first (higher quality), OpenAI as fallback
 const OPENAI_VOICES: { id: string; label: string; desc: string }[] = [
-  { id: "shimmer", label: "Shimmer", desc: "따뜻한 여성 (추천)" },
-  { id: "coral", label: "Coral", desc: "부드러운 여성" },
-  { id: "nova", label: "Nova", desc: "맑은 여성" },
-  { id: "sage", label: "Sage", desc: "차분한 중성" },
-  { id: "alloy", label: "Alloy", desc: "균형 잡힌 중성" },
-  { id: "fable", label: "Fable", desc: "포근한 내레이션" },
+  { id: "XrExE9yKIg1WjnnlVkGX", label: "Matilda ✨", desc: "따뜻한 여성 · ElevenLabs (추천)" },
+  { id: "21m00Tcm4TlvDq8ikWAM", label: "Rachel ✨",  desc: "부드러운 여성 · ElevenLabs" },
+  { id: "AZnzlk1XvdvUeBnXmlld", label: "Domi ✨",    desc: "차분한 여성 · ElevenLabs" },
+  { id: "EXAVITQu4vr4xnSDxMaL", label: "Bella ✨",   desc: "포근한 여성 · ElevenLabs" },
+  { id: "shimmer",               label: "Shimmer",   desc: "따뜻한 여성 · OpenAI" },
+  { id: "coral",                 label: "Coral",     desc: "부드러운 여성 · OpenAI" },
+  { id: "nova",                  label: "Nova",      desc: "맑은 여성 · OpenAI" },
 ];
 
 // Map the pacing slider (0.55 slow ~ 0.85 normal) to a delivery instruction.
@@ -93,7 +94,7 @@ export function MeditationPlayback({
   const [selectedColorId, setSelectedColorId] = useState<ColorId>("off");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
-  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("shimmer"); // OpenAI TTS voice id
+  const [selectedVoiceName, setSelectedVoiceName] = useState<string>("XrExE9yKIg1WjnnlVkGX"); // ElevenLabs Matilda (fallback: OpenAI shimmer)
   const [voiceRate, setVoiceRate] = useState<number>(0.68); // ultra calm meditation pace
   const [showVoicePanel, setShowVoicePanel] = useState<boolean>(false);
   const [showTherapyPanel, setShowTherapyPanel] = useState<boolean>(false);

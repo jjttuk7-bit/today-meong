@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { ElevenLabsClient } from "elevenlabs";
 import { put, list } from "@vercel/blob";
 
 // Shared OpenAI logic used by both the local Express dev server (server.ts)
@@ -362,15 +363,60 @@ export interface SpeechInput {
   instructions?: string;
 }
 
-// Synthesize narration speech with OpenAI. Throws when no API key is set so the
-// client can gracefully fall back to the browser's speechSynthesis.
+// ── ElevenLabs (primary) → OpenAI TTS (fallback) ────────────────────────────
+
+// Korean-optimized ElevenLabs voices (multilingual_v2 model supports Korean well)
+export const ELEVENLABS_VOICES = [
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda",    desc: "따뜻한 여성 (추천)" },
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel",     desc: "부드러운 여성" },
+  { id: "AZnzlk1XvdvUeBnXmlld", name: "Domi",       desc: "차분한 여성" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Bella",      desc: "포근한 여성" },
+] as const;
+
+const hasElevenLabsKey = () =>
+  !!process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_API_KEY !== "";
+
+// Synthesize speech — prefers ElevenLabs, falls back to OpenAI TTS.
+// Throws only when neither key is available.
 export async function synthesizeSpeech({ text, voice = "shimmer", instructions }: SpeechInput) {
+  // ElevenLabs path (better quality)
+  if (hasElevenLabsKey()) {
+    try {
+      const el = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
+
+      // Map OpenAI voice names to ElevenLabs voice IDs, or use directly if an EL ID
+      const elVoiceId =
+        ELEVENLABS_VOICES.find((v) => v.name.toLowerCase() === voice.toLowerCase())?.id ??
+        (voice.length > 10 ? voice : ELEVENLABS_VOICES[0].id); // long string = direct EL id
+
+      const audioStream = await el.generate({
+        voice: elVoiceId,
+        text,
+        model_id: "eleven_multilingual_v2",
+        voice_settings: {
+          stability: 0.72,        // 안정적이지만 너무 로봇 같지 않게
+          similarity_boost: 0.82, // 목소리 일관성
+          style: 0.28,            // 약간의 감정 표현
+          use_speaker_boost: true,
+        },
+      });
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of audioStream) {
+        chunks.push(Buffer.from(chunk));
+      }
+      return { audio: Buffer.concat(chunks), contentType: "audio/mpeg" };
+    } catch (err) {
+      console.warn("ElevenLabs TTS failed, falling back to OpenAI TTS:", err);
+    }
+  }
+
+  // OpenAI TTS fallback
   if (!hasApiKey()) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error("No TTS API key configured (ELEVENLABS_API_KEY or OPENAI_API_KEY)");
   }
 
   const ai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
   const safeVoice = (TTS_VOICES as readonly string[]).includes(voice) ? voice : "shimmer";
 
   const response = await ai.audio.speech.create({
@@ -385,7 +431,6 @@ export async function synthesizeSpeech({ text, voice = "shimmer", instructions }
         "Tone: Serene, nurturing, tranquil — never bright, energetic, or announcer-like.",
         "Delivery: Breathy, hushed, relaxed, with soft falling intonation and slightly lowered pitch.",
         "Pacing: Extremely slow and spacious, leaving long, calm silences between sentences.",
-        "Pronunciation: Smooth and softened, gently trailing — never clipped or robotic.",
       ].join("\n"),
     response_format: "mp3",
   });
