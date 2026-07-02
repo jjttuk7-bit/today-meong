@@ -1,8 +1,10 @@
 import { ThemeOption, MoodOption } from "./types";
 
 export const THEME_OPTIONS: ThemeOption[] = [
+  // ── 자연멍 (Nature) ──────────────────────────────
   {
     id: "fire",
+    category: "nature",
     name: "불멍",
     englishName: "Fire Gazing",
     iconName: "Flame",
@@ -13,6 +15,7 @@ export const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     id: "water",
+    category: "nature",
     name: "물멍",
     englishName: "Water Flow",
     iconName: "Droplet",
@@ -23,6 +26,7 @@ export const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     id: "wave",
+    category: "nature",
     name: "파도멍",
     englishName: "Ocean Waves",
     iconName: "Waves",
@@ -33,6 +37,7 @@ export const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     id: "cloud",
+    category: "nature",
     name: "구름멍",
     englishName: "Cloud Drift",
     iconName: "Cloud",
@@ -43,6 +48,7 @@ export const THEME_OPTIONS: ThemeOption[] = [
   },
   {
     id: "rain",
+    category: "nature",
     name: "비멍",
     englishName: "Raindrops",
     iconName: "CloudRain",
@@ -50,6 +56,19 @@ export const THEME_OPTIONS: ThemeOption[] = [
     englishDescription: "Relax with cozy, persistent ambient rain on windows",
     gradient: "from-slate-600 via-blue-500 to-stone-950",
     defaultColors: ["#3a6073", "#141e30", "#050c12"],
+  },
+
+  // ── 한국멍 (Korean) ──────────────────────────────
+  {
+    id: "sansa",
+    category: "korean",
+    name: "산사멍",
+    englishName: "Temple at Dawn",
+    iconName: "Sansa",
+    description: "새벽 안개 속 산사, 풍경 소리에 마음을 비웁니다",
+    englishDescription: "Empty your mind to the sound of wind bells in a misty mountain temple",
+    gradient: "from-amber-900 via-purple-950 to-slate-950",
+    defaultColors: ["#0a0618", "#2d1b4e", "#1a0f02"],
   },
 ];
 

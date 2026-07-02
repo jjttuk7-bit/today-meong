@@ -1,7 +1,9 @@
-export type ThemeId = 'fire' | 'water' | 'wave' | 'cloud' | 'rain';
+export type ThemeId = 'fire' | 'water' | 'wave' | 'cloud' | 'rain' | 'sansa';
+export type ThemeCategory = 'nature' | 'korean';
 
 export interface ThemeOption {
   id: ThemeId;
+  category: ThemeCategory;
   name: string;
   englishName: string;
   iconName: string;

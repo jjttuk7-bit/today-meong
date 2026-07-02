@@ -91,6 +91,10 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
     let lightning = { intensity: 0, nextAt: 0 };
     let mistOffset = 0;
 
+    // Sansa-specific state
+    let lanterns: any[] = [];
+    let sansaMistOffset = 0;
+
     // Helper to dynamically shift fire sparks colors during Chromotherapy
     const getEmberColor = () => {
       if (colorId === "green") {
@@ -256,12 +260,44 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
       }
     };
 
+    // Initialize Sansa (연등 + 안개 + 미세 별빛)
+    const initSansa = () => {
+      // 연등 — 천천히 위로 부유하며 흔들리는 등불
+      const lanternCount = Math.floor(22 * density);
+      for (let i = 0; i < lanternCount; i++) {
+        lanterns.push({
+          x: Math.random() * width,
+          y: height * 0.3 + Math.random() * height * 0.6,
+          vy: -(0.12 + Math.random() * 0.18) * speed,
+          size: 5 + Math.random() * 12,
+          alpha: 0.3 + Math.random() * 0.5,
+          hue: 28 + Math.random() * 20, // 따뜻한 황금~주황
+          phase: Math.random() * Math.PI * 2, // 흔들림 위상
+          swaySpeed: 0.008 + Math.random() * 0.012,
+          swayAmp: 4 + Math.random() * 10,
+          glowSize: 18 + Math.random() * 28,
+        });
+      }
+      // 배경 별(희미한 새벽 별)
+      const starCount = Math.floor(40 * density);
+      for (let i = 0; i < starCount; i++) {
+        backgroundStars.push({
+          x: Math.random() * width,
+          y: Math.random() * height * 0.55,
+          size: 0.4 + Math.random() * 1.2,
+          alpha: 0.05 + Math.random() * 0.25,
+          twinkle: 0.004 + Math.random() * 0.008,
+        });
+      }
+    };
+
     // Setup depending on theme
     if (theme === "fire") initFire();
     else if (theme === "water") initWater();
     else if (theme === "wave") initWave();
     else if (theme === "cloud") initCloud();
     else if (theme === "rain") initRain();
+    else if (theme === "sansa") initSansa();
 
     // Pre-render a small film-grain noise tile once for a cinematic texture
     const grainTile = document.createElement("canvas");
@@ -818,6 +854,123 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
         if (animateStep) {
           ripples = ripples.filter((rip) => (rip.splash ? rip.life < rip.maxLife : rip.radius < rip.maxRadius));
         }
+        ctx.restore();
+      }
+
+      // --- THEME 6: 산사멍 (SANSA) ---
+      else if (theme === "sansa") {
+        ctx.save();
+        const t = Date.now();
+
+        // 1. 새벽 하늘 그라데이션: 깊은 남색 → 연보라 → 바닥 실루엣 어둠
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+        skyGrad.addColorStop(0,   "rgba(6, 4, 18, 1)");
+        skyGrad.addColorStop(0.45,"rgba(28, 14, 52, 1)");
+        skyGrad.addColorStop(0.75,"rgba(45, 20, 12, 0.7)");
+        skyGrad.addColorStop(1,   "rgba(5, 3, 8, 1)");
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        // 2. 새벽 별 (희미하게 반짝)
+        ctx.globalCompositeOperation = "lighter";
+        backgroundStars.forEach((s) => {
+          const flicker = 0.4 + Math.sin(t * s.twinkle) * 0.6;
+          ctx.globalAlpha = s.alpha * flicker;
+          ctx.fillStyle = "rgba(220, 215, 255, 1)";
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalCompositeOperation = "source-over";
+
+        // 3. 안개 — 산허리를 감싸는 새벽 안개 (수평 흐름)
+        if (animateStep) sansaMistOffset += 0.15 * speed;
+        for (let m = 0; m < 4; m++) {
+          const mistY = height * (0.38 + m * 0.07);
+          const mx = ((sansaMistOffset * (0.15 + m * 0.08)) % (width + 400)) - 200;
+          const alpha = (0.05 + m * 0.02) * (0.7 + breatheScale * 0.3);
+          const mg = ctx.createRadialGradient(mx, mistY, 0, mx, mistY, 380 - m * 40);
+          mg.addColorStop(0, `rgba(180, 175, 210, ${alpha})`);
+          mg.addColorStop(1, "transparent");
+          ctx.fillStyle = mg;
+          ctx.fillRect(0, 0, width, height);
+        }
+
+        // 4. 산·법당 실루엣 (바닥 검은 산 능선 + 법당)
+        ctx.fillStyle = "rgba(4, 2, 10, 0.92)";
+        // 산 능선
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        ctx.lineTo(0, height * 0.68);
+        ctx.quadraticCurveTo(width * 0.12, height * 0.54, width * 0.28, height * 0.62);
+        ctx.quadraticCurveTo(width * 0.38, height * 0.46, width * 0.5, height * 0.58);
+        ctx.quadraticCurveTo(width * 0.62, height * 0.44, width * 0.72, height * 0.56);
+        ctx.quadraticCurveTo(width * 0.86, height * 0.50, width, height * 0.64);
+        ctx.lineTo(width, height);
+        ctx.closePath();
+        ctx.fill();
+
+        // 법당 실루엣 (중앙 하단)
+        const bx = width * 0.5;
+        const by = height * 0.58;
+        ctx.fillStyle = "rgba(3, 2, 8, 0.98)";
+        // 지붕 처마 (전통 팔작지붕 느낌)
+        ctx.beginPath();
+        ctx.moveTo(bx - 68, by);
+        ctx.lineTo(bx - 76, by - 4);   // 처마 끝 (좌)
+        ctx.lineTo(bx - 52, by - 22);
+        ctx.lineTo(bx, by - 30);        // 용마루
+        ctx.lineTo(bx + 52, by - 22);
+        ctx.lineTo(bx + 76, by - 4);   // 처마 끝 (우)
+        ctx.lineTo(bx + 68, by);
+        ctx.closePath();
+        ctx.fill();
+        // 기단
+        ctx.fillRect(bx - 42, by, 84, 28);
+
+        // 5. 연등 (lotus lanterns) — 따뜻한 황금빛 등불이 천천히 떠오름
+        ctx.globalCompositeOperation = "lighter";
+        lanterns.forEach((l) => {
+          const sway = Math.sin(t * l.swaySpeed + l.phase) * l.swayAmp;
+          const lx = l.x + sway;
+          const pulse = 0.85 + Math.sin(t * 0.0009 + l.phase) * 0.15;
+
+          // 연등 외부 발광 (glow)
+          const glow = ctx.createRadialGradient(lx, l.y, 0, lx, l.y, l.glowSize * pulse);
+          glow.addColorStop(0, `hsla(${l.hue}, 85%, 65%, ${l.alpha * 0.5})`);
+          glow.addColorStop(0.5, `hsla(${l.hue}, 70%, 40%, ${l.alpha * 0.15})`);
+          glow.addColorStop(1, "transparent");
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = glow;
+          ctx.fillRect(lx - l.glowSize, l.y - l.glowSize, l.glowSize * 2, l.glowSize * 2);
+
+          // 연등 본체 (작은 타원)
+          ctx.globalAlpha = l.alpha * pulse;
+          ctx.fillStyle = `hsla(${l.hue}, 90%, 70%, 1)`;
+          ctx.beginPath();
+          ctx.ellipse(lx, l.y, l.size * 0.55, l.size, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 연등 심지 (하단 흰 빛)
+          ctx.globalAlpha = l.alpha * 0.7 * pulse;
+          ctx.fillStyle = "rgba(255, 248, 200, 1)";
+          ctx.beginPath();
+          ctx.ellipse(lx, l.y + l.size * 0.3, l.size * 0.2, l.size * 0.25, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (animateStep) {
+            l.y += l.vy;
+            // 화면 위로 빠져나가면 아래에서 다시 생성
+            if (l.y < -l.glowSize * 2) {
+              l.y = height + l.glowSize;
+              l.x = Math.random() * width;
+              l.alpha = 0.3 + Math.random() * 0.5;
+              l.hue = 28 + Math.random() * 20;
+            }
+          }
+        });
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
         ctx.restore();
       }
 

@@ -19,8 +19,27 @@ function getFallbackNarration(theme: string, isEn: boolean): string[] {
     wave: { ko: "밀려오는 파도 소리에 가만히 귀 기울여 봅니다.", en: "Gently listen to the waves rolling to the shore." },
     cloud: { ko: "느리게 흘러가는 구름을 바라봅니다.", en: "Watch the slow clouds drifting across the sky." },
     rain: { ko: "창을 적시는 빗소리에 마음을 맡겨 봅니다.", en: "Let the soft sound of rain hold your mind." },
+    sansa: { ko: "풍경 소리가 사라지기 전, 그 여운 속에 머물러 봅니다.", en: "Before the wind bell fades, rest in its lingering echo." },
   };
   const first = (opener[theme] || opener.cloud)[isEn ? "en" : "ko"];
+
+  if (theme === "sansa") {
+    return isEn
+      ? [
+          first,
+          "Breathe in slowly… and let go with the wind bell's echo.",
+          "The mist rises gently. Let your thoughts rise with it and disappear.",
+          "You need nothing right now. This stillness is already yours.",
+          "Rest here, in the quiet that has always been waiting for you.",
+        ]
+      : [
+          first,
+          "천천히 숨을 들이마시고… 풍경 소리의 여운과 함께 내쉽니다.",
+          "안개가 피어오르듯, 떠오르는 생각들도 그렇게 흘려보냅니다.",
+          "지금 이 순간, 아무것도 필요하지 않습니다. 이 고요가 당신 것입니다.",
+          "늘 여기 있었던 이 침묵 속에, 편안하게 머물러 보세요.",
+        ];
+  }
 
   return isEn
     ? [
@@ -383,6 +402,7 @@ const THEME_SCENE: Record<string, string> = {
   wave: "a calm dark ocean at night under faint moonlight, gentle rolling waves meeting a quiet shore, deep teal and indigo",
   cloud: "slow drifting clouds across a vast deep twilight sky with faint distant stars, dreamy purple and indigo nebula tones",
   rain: "soft rain falling against a window at night with blurred bokeh city lights, moody blue and slate tones, cozy and quiet",
+  sansa: "a serene Korean Buddhist mountain temple (sansa) at pre-dawn, the main hall silhouette glowing faintly from candlelight within, red and gold lotus lanterns floating upward in soft mist, ancient stone steps, deep indigo and amber, cinematic and deeply peaceful",
 };
 
 const MOOD_FEELING: Record<string, string> = {

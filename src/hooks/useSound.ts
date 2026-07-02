@@ -478,6 +478,113 @@ export function useSound() {
       }, rainInterval);
 
       intervalIdsRef.current.push(intervalId);
+
+    } else if (theme === "sansa") {
+      // ── 산사멍 사운드 ────────────────────────────────────────────────────────
+      // 1. 계곡물 — 베이스 앰비언트 (낮은 bandpass 핑크노이즈)
+      const stream = playNoiseLoop("bandpass", 320, 0.8, 0.18);
+      // 계곡물 흐름 느리게 모듈레이트
+      const streamLfo = ctx.createOscillator();
+      streamLfo.type = "sine";
+      streamLfo.frequency.setValueAtTime(0.06, ctx.currentTime);
+      const streamLfoGain = ctx.createGain();
+      streamLfoGain.gain.setValueAtTime(60, ctx.currentTime);
+      streamLfo.connect(streamLfoGain);
+      streamLfoGain.connect(stream.filter.frequency);
+      streamLfo.start();
+      sourceNodesRef.current.push(streamLfo);
+
+      // 2. 바람 — 아주 미세한 고음 바람 소리
+      playNoiseLoop("highpass", 2800, 0.4, 0.04);
+
+      // 3. 풍경 (Wind Bell) — 맑은 두 배음이 천천히 울리다 긴 꼬리로 사라짐
+      const triggerWindBell = () => {
+        if (!isPlayingRef.current || !audioCtxRef.current) return;
+        const c = audioCtxRef.current;
+        const baseFreq = params.pitch || 880; // AI가 지정한 기본 주파수
+
+        // 두 개의 배음 (근사값: 880Hz + 1320Hz)
+        [baseFreq, baseFreq * 1.498].forEach((freq, i) => {
+          const osc = c.createOscillator();
+          const gain = c.createGain();
+          const panner = c.createStereoPanner ? c.createStereoPanner() : null;
+
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq + (Math.random() * 4 - 2), c.currentTime);
+
+          // 맑게 시작해서 긴 꼬리로 자연스럽게 사라짐 (5~7초)
+          const vol = i === 0 ? 0.055 : 0.035;
+          const decay = 5.0 + Math.random() * 2.0;
+          gain.gain.setValueAtTime(0, c.currentTime);
+          gain.gain.linearRampToValueAtTime(vol, c.currentTime + 0.01);
+          gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + decay);
+
+          osc.connect(gain);
+          if (panner) {
+            // 풍경이 살짝 왼쪽이나 오른쪽에서 들리는 느낌
+            panner.pan.setValueAtTime((Math.random() * 0.6 - 0.3), c.currentTime);
+            gain.connect(panner);
+            panner.connect(masterVolume);
+          } else {
+            gain.connect(masterVolume);
+          }
+
+          osc.start(c.currentTime);
+          osc.stop(c.currentTime + decay + 0.1);
+          sourceNodesRef.current.push(osc);
+        });
+      };
+
+      // 풍경은 8~20초 간격으로 불규칙하게 (바람에 흔들리듯)
+      const scheduleWindBell = () => {
+        if (!isPlayingRef.current) return;
+        triggerWindBell();
+        const next = (8000 + Math.random() * 12000) / (params.soundSpeed || 0.6);
+        const id = setTimeout(scheduleWindBell, next);
+        intervalIdsRef.current.push(id as unknown as NodeJS.Timeout);
+      };
+      // 첫 울림은 2초 후
+      const firstBell = setTimeout(scheduleWindBell, 2000);
+      intervalIdsRef.current.push(firstBell as unknown as NodeJS.Timeout);
+
+      // 4. 목탁 (Moktak) — 짧고 단단한 나무 타격음, 느린 규칙적 박자
+      const triggerMoktak = () => {
+        if (!isPlayingRef.current || !audioCtxRef.current) return;
+        const c = audioCtxRef.current;
+
+        // 목탁 특유의 단단하고 중간 피치의 클릭
+        const osc = c.createOscillator();
+        const gain = c.createGain();
+        const filter = c.createBiquadFilter();
+
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(420 + Math.random() * 20, c.currentTime);
+
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(800, c.currentTime);
+        filter.Q.setValueAtTime(3, c.currentTime);
+
+        gain.gain.setValueAtTime(0.065, c.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.25);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(masterVolume);
+
+        osc.start(c.currentTime);
+        osc.stop(c.currentTime + 0.28);
+        sourceNodesRef.current.push(osc);
+      };
+
+      // 목탁: 약 3~4초 간격 (호흡 속도에 맞게)
+      const moktakInterval = (3200 + Math.random() * 800) / (params.soundSpeed || 0.7);
+      const moktakId = setInterval(() => {
+        if (Math.random() < 0.85) triggerMoktak();
+      }, moktakInterval);
+      intervalIdsRef.current.push(moktakId);
+
+      // 5. 바이노럴 (Theta 4Hz — 깊은 명상, 기존과 동일)
+      playBinauralBeats(100, 4, 0.04);
     }
   };
 

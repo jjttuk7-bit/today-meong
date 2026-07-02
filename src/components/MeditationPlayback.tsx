@@ -688,7 +688,7 @@ export function MeditationPlayback({
           {/* Top subtle theme label */}
           <div className="flex justify-between items-center w-full">
             <span className="text-white/30 text-xs font-medium tracking-widest uppercase">
-              오늘의 멍 • {theme === "fire" ? "불멍" : theme === "water" ? "물멍" : theme === "wave" ? "파도멍" : theme === "cloud" ? "구름멍" : "비멍"}
+              오늘의 멍 • {{ fire: "불멍", water: "물멍", wave: "파도멍", cloud: "구름멍", rain: "비멍", sansa: "산사멍" }[theme] ?? theme}
             </span>
             {isPaused && (
               <span className="text-orange-500/70 text-xs font-mono animate-pulse uppercase tracking-wider">
