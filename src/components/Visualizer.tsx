@@ -260,33 +260,36 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
       }
     };
 
-    // Initialize Sansa (연등 + 안개 + 미세 별빛)
+    // Initialize Sansa — 정중동(靜中動): 극도로 조용하고 미세한 움직임만
     const initSansa = () => {
-      // 연등 — 천천히 위로 부유하며 흔들리는 등불
-      const lanternCount = Math.floor(22 * density);
+      // 연등은 아주 적게, 법당 처마 근방에 고정된 듯 매달려 있음
+      // 일부는 거의 정지, 일부만 아주 천천히 떠오름
+      const lanternCount = Math.floor(6 * Math.max(0.6, density));
       for (let i = 0; i < lanternCount; i++) {
+        const isHanging = i < Math.ceil(lanternCount * 0.6); // 60%는 처마에 매달린 채 거의 정지
         lanterns.push({
-          x: Math.random() * width,
-          y: height * 0.3 + Math.random() * height * 0.6,
-          vy: -(0.12 + Math.random() * 0.18) * speed,
-          size: 5 + Math.random() * 12,
-          alpha: 0.3 + Math.random() * 0.5,
-          hue: 28 + Math.random() * 20, // 따뜻한 황금~주황
-          phase: Math.random() * Math.PI * 2, // 흔들림 위상
-          swaySpeed: 0.008 + Math.random() * 0.012,
-          swayAmp: 4 + Math.random() * 10,
-          glowSize: 18 + Math.random() * 28,
+          x: width * (0.25 + (i / lanternCount) * 0.5) + (Math.random() * 60 - 30),
+          y: height * (isHanging ? (0.46 + Math.random() * 0.08) : (0.35 + Math.random() * 0.2)),
+          vy: isHanging ? -(0.008 + Math.random() * 0.008) : -(0.018 + Math.random() * 0.022),
+          size: isHanging ? (7 + Math.random() * 5) : (4 + Math.random() * 6),
+          alpha: isHanging ? (0.55 + Math.random() * 0.3) : (0.25 + Math.random() * 0.3),
+          hue: 32 + Math.random() * 14, // 따뜻한 황금~호박색만
+          phase: Math.random() * Math.PI * 2,
+          swaySpeed: 0.003 + Math.random() * 0.004, // 매우 느린 흔들림
+          swayAmp: isHanging ? (2 + Math.random() * 3) : (1 + Math.random() * 2), // 아주 미세
+          glowSize: isHanging ? (22 + Math.random() * 16) : (12 + Math.random() * 10),
+          isHanging,
         });
       }
-      // 배경 별(희미한 새벽 별)
-      const starCount = Math.floor(40 * density);
+      // 새벽 별: 극히 희미하게, 적게
+      const starCount = Math.floor(18 * density);
       for (let i = 0; i < starCount; i++) {
         backgroundStars.push({
           x: Math.random() * width,
-          y: Math.random() * height * 0.55,
-          size: 0.4 + Math.random() * 1.2,
-          alpha: 0.05 + Math.random() * 0.25,
-          twinkle: 0.004 + Math.random() * 0.008,
+          y: Math.random() * height * 0.42,
+          size: 0.3 + Math.random() * 0.8,
+          alpha: 0.04 + Math.random() * 0.12, // 거의 안 보이게
+          twinkle: 0.002 + Math.random() * 0.004, // 매우 느린 깜빡임
         });
       }
     };
@@ -928,49 +931,57 @@ export function Visualizer({ theme, params, isPaused, breathingId, breathePhase,
         // 기단
         ctx.fillRect(bx - 42, by, 84, 28);
 
-        // 5. 연등 (lotus lanterns) — 따뜻한 황금빛 등불이 천천히 떠오름
-        ctx.globalCompositeOperation = "lighter";
+        // 5. 연등 — 처마에 매달려 아주 미세하게 흔들리는 등불 (정중동)
         lanterns.forEach((l) => {
           const sway = Math.sin(t * l.swaySpeed + l.phase) * l.swayAmp;
           const lx = l.x + sway;
-          const pulse = 0.85 + Math.sin(t * 0.0009 + l.phase) * 0.15;
+          // 숨결처럼 아주 느리게 밝기가 오르내림
+          const pulse = 0.92 + Math.sin(t * 0.00055 + l.phase) * 0.08;
 
-          // 연등 외부 발광 (glow)
+          // 바깥 발광 — 주변을 은은하게 물들이는 온기
+          ctx.globalCompositeOperation = "lighter";
           const glow = ctx.createRadialGradient(lx, l.y, 0, lx, l.y, l.glowSize * pulse);
-          glow.addColorStop(0, `hsla(${l.hue}, 85%, 65%, ${l.alpha * 0.5})`);
-          glow.addColorStop(0.5, `hsla(${l.hue}, 70%, 40%, ${l.alpha * 0.15})`);
-          glow.addColorStop(1, "transparent");
+          glow.addColorStop(0,   `hsla(${l.hue}, 80%, 58%, ${l.alpha * 0.28})`);
+          glow.addColorStop(0.55,`hsla(${l.hue}, 65%, 35%, ${l.alpha * 0.07})`);
+          glow.addColorStop(1,   "transparent");
           ctx.globalAlpha = 1;
           ctx.fillStyle = glow;
           ctx.fillRect(lx - l.glowSize, l.y - l.glowSize, l.glowSize * 2, l.glowSize * 2);
 
-          // 연등 본체 (작은 타원)
-          ctx.globalAlpha = l.alpha * pulse;
-          ctx.fillStyle = `hsla(${l.hue}, 90%, 70%, 1)`;
+          // 연등 본체 (작은 타원, 진하지 않게)
+          ctx.globalCompositeOperation = "source-over";
+          ctx.globalAlpha = l.alpha * pulse * 0.75;
+          ctx.fillStyle = `hsla(${l.hue}, 85%, 62%, 1)`;
           ctx.beginPath();
-          ctx.ellipse(lx, l.y, l.size * 0.55, l.size, 0, 0, Math.PI * 2);
+          ctx.ellipse(lx, l.y, l.size * 0.48, l.size * 0.88, 0, 0, Math.PI * 2);
           ctx.fill();
 
-          // 연등 심지 (하단 흰 빛)
-          ctx.globalAlpha = l.alpha * 0.7 * pulse;
-          ctx.fillStyle = "rgba(255, 248, 200, 1)";
+          // 심지 — 아주 작고 흰 불꽃
+          ctx.globalAlpha = l.alpha * 0.5 * pulse;
+          ctx.fillStyle = "rgba(255, 250, 210, 1)";
           ctx.beginPath();
-          ctx.ellipse(lx, l.y + l.size * 0.3, l.size * 0.2, l.size * 0.25, 0, 0, Math.PI * 2);
+          ctx.ellipse(lx, l.y + l.size * 0.28, l.size * 0.14, l.size * 0.18, 0, 0, Math.PI * 2);
           ctx.fill();
+
+          ctx.globalCompositeOperation = "source-over";
+          ctx.globalAlpha = 1;
 
           if (animateStep) {
             l.y += l.vy;
-            // 화면 위로 빠져나가면 아래에서 다시 생성
-            if (l.y < -l.glowSize * 2) {
-              l.y = height + l.glowSize;
-              l.x = Math.random() * width;
-              l.alpha = 0.3 + Math.random() * 0.5;
-              l.hue = 28 + Math.random() * 20;
+            if (l.isHanging) {
+              // 처마에 매달린 연등은 일정 범위 안에서만 아주 조금 움직임 (거의 정지)
+              if (l.y < height * 0.38) l.vy = Math.abs(l.vy) * 0.1; // 살짝 내려오다가 거의 멈춤
+              if (l.y > height * 0.56) l.vy = -Math.abs(l.vy) * 0.1;
+            } else {
+              // 떠오르는 연등은 화면 위로 빠지면 재생성
+              if (l.y < -l.glowSize * 2) {
+                l.y = height * 0.55 + Math.random() * height * 0.15;
+                l.x = width * 0.2 + Math.random() * width * 0.6;
+                l.alpha = 0.2 + Math.random() * 0.25;
+              }
             }
           }
         });
-        ctx.globalCompositeOperation = "source-over";
-        ctx.globalAlpha = 1;
         ctx.restore();
       }
 
