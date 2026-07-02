@@ -33,9 +33,17 @@ session) is layered behind the canvas, which lays a soft translucent veil over i
 ## Deploy on Vercel
 
 The backend runs as serverless functions in [`api/`](api) (`/api/analyze-mood`,
-`/api/tts`), so no extra config is needed. **Add `OPENAI_API_KEY` in your Vercel
-project's Environment Variables** (Settings → Environment Variables) and redeploy
-so the live site uses OpenAI for mood analysis and voice narration.
+`/api/tts`, `/api/generate-bg`), so no extra config is needed. **Add
+`OPENAI_API_KEY` in your Vercel project's Environment Variables** (Settings →
+Environment Variables) and redeploy so the live site uses OpenAI.
+
+### Background image caching (recommended — controls cost)
+
+`/api/generate-bg` caches each theme×mood image so it is only generated once and
+then reused from the CDN, keeping per-session AI cost near zero. To enable it,
+create a **Vercel Blob store** (Storage → Create → Blob) and connect it to the
+project — Vercel injects `BLOB_READ_WRITE_TOKEN` automatically. Without the token
+the endpoint still works, generating a fresh image inline each time (fallback).
 
 Locally, the same endpoints are served by the Express dev server in
 [`server.ts`](server.ts); both share the logic in [`lib/openai.ts`](lib/openai.ts).

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { generateBackground } from "../lib/openai.js";
+import { getOrCreateBackground } from "../lib/openai.js";
 
 // gpt-image-1 generation can take 10-30s; allow up to 60s (Hobby plan max).
 export const config = { maxDuration: 60 };
@@ -17,9 +17,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { dataUrl } = await generateBackground({ theme, moodQuick });
+    const { image, cached } = await getOrCreateBackground({ theme, moodQuick });
     res.setHeader("Cache-Control", "public, max-age=86400");
-    return res.status(200).json({ image: dataUrl });
+    return res.status(200).json({ image, cached });
   } catch (error) {
     console.error("OpenAI background image error:", error);
     // 503 signals the client to keep the pure generative-canvas look.

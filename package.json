@@ -13,6 +13,7 @@
   "dependencies": {
     "openai": "^4.77.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@vercel/blob": "^0.27.0",
     "@vitejs/plugin-react": "^5.0.4",
     "lucide-react": "^0.546.0",
     "react": "^19.0.1",

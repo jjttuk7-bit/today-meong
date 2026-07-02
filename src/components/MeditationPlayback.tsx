@@ -74,7 +74,8 @@ export function MeditationPlayback({
 }: MeditationPlaybackProps) {
   const { initSynth, fadeOutAndStop, setVolume } = useSound();
 
-  const [bgImage, setBgImage] = useState<string | null>(() => bgImageCache.get(theme) || null);
+  const bgCacheKey = `${theme}-${moodQuick || "calm"}`;
+  const [bgImage, setBgImage] = useState<string | null>(() => bgImageCache.get(bgCacheKey) || null);
   
   const [isEntering, setIsEntering] = useState(true);
   const [timeLeft, setTimeLeft] = useState(duration * 60); // converted to seconds
@@ -224,7 +225,7 @@ export function MeditationPlayback({
   // Generate an AI ambient background image (gpt-image-1) once per theme.
   // Runs during the entering screen; on failure we keep the pure canvas look.
   useEffect(() => {
-    const cached = bgImageCache.get(theme);
+    const cached = bgImageCache.get(bgCacheKey);
     if (cached) {
       setBgImage(cached);
       return;
@@ -241,7 +242,7 @@ export function MeditationPlayback({
         if (!res.ok) throw new Error(`bg request failed: ${res.status}`);
         const data = await res.json();
         if (data?.image && !cancelled) {
-          bgImageCache.set(theme, data.image);
+          bgImageCache.set(bgCacheKey, data.image);
           setBgImage(data.image);
         }
       } catch (err) {
@@ -252,7 +253,7 @@ export function MeditationPlayback({
     return () => {
       cancelled = true;
     };
-  }, [theme, moodQuick]);
+  }, [theme, moodQuick, bgCacheKey]);
 
   // Handle active session timer countdown
   useEffect(() => {

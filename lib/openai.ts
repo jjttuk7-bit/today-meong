@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { put, list } from "@vercel/blob";
 
 // Shared OpenAI logic used by both the local Express dev server (server.ts)
 // and the Vercel serverless functions under /api.
@@ -424,5 +425,47 @@ export async function generateBackground({ theme, moodQuick, size = "1536x1024" 
     throw new Error("Image generation returned no data");
   }
 
-  return { dataUrl: `data:image/png;base64,${b64}` };
+  return { buffer: Buffer.from(b64, "base64"), dataUrl: `data:image/png;base64,${b64}` };
+}
+
+// Persistent background cache: generate each theme×mood image once and reuse it
+// from Vercel Blob (CDN) so per-session cost drops to ~0. Falls back to on-demand
+// base64 generation when Blob isn't configured (e.g. local dev / no token).
+const blobEnabled = () => !!process.env.BLOB_READ_WRITE_TOKEN;
+
+export async function getOrCreateBackground({ theme, moodQuick }: BackgroundInput): Promise<{
+  image: string;
+  cached: boolean;
+}> {
+  const key = `bg/${theme}-${moodQuick || "calm"}.png`;
+
+  // 1. Serve from the persistent Blob cache when available
+  if (blobEnabled()) {
+    try {
+      const { blobs } = await list({ prefix: key });
+      const hit = blobs.find((b) => b.pathname === key);
+      if (hit) return { image: hit.url, cached: true };
+    } catch (error) {
+      console.warn("Blob cache lookup failed, will generate:", error);
+    }
+  }
+
+  // 2. Generate a fresh image
+  const { buffer, dataUrl } = await generateBackground({ theme, moodQuick });
+
+  // 3. Persist to Blob for reuse (best-effort); otherwise return inline data URL
+  if (blobEnabled()) {
+    try {
+      const { url } = await put(key, buffer, {
+        access: "public",
+        contentType: "image/png",
+        addRandomSuffix: false,
+      });
+      return { image: url, cached: false };
+    } catch (error) {
+      console.warn("Blob upload failed, returning inline image:", error);
+    }
+  }
+
+  return { image: dataUrl, cached: false };
 }

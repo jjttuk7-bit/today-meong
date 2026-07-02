@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
-import { analyzeMood, synthesizeSpeech, generateBackground } from "./lib/openai.js";
+import { analyzeMood, synthesizeSpeech, getOrCreateBackground } from "./lib/openai.js";
 
 dotenv.config();
 
@@ -52,9 +52,9 @@ app.post("/api/generate-bg", async (req, res) => {
   }
 
   try {
-    const { dataUrl } = await generateBackground({ theme, moodQuick });
+    const { image, cached } = await getOrCreateBackground({ theme, moodQuick });
     res.set("Cache-Control", "public, max-age=86400");
-    return res.json({ image: dataUrl });
+    return res.json({ image, cached });
   } catch (error) {
     console.error("OpenAI background image error:", error);
     // 503 signals the client to keep the pure generative-canvas look.
